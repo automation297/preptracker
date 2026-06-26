@@ -56,7 +56,7 @@ router.get('/', requireAuth, async (req, res) => {
        FROM dropoffs d
        JOIN users u ON u.id = d.created_by
        LEFT JOIN dropoff_proteins dp ON dp.dropoff_id = d.id
-       GROUP BY d.id, u.name
+       GROUP BY d.id, d.dropped_at, d.status, d.picked_up_at, u.name
        ORDER BY d.dropped_at DESC`
     );
     res.json({ dropoffs: rows });
