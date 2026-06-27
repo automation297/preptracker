@@ -54,8 +54,8 @@ async function api(path, opts = {}) {
 }
 
 function toast(msg) {
-  const t = $('toast'); t.textContent = msg; t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2800);
+  const el = $('toast'); el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2800);
 }
 
 function esc(s){ return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -433,7 +433,6 @@ function handleLogProgress(el) {
 }
 
 // ---------- PUSH NOTIFICATIONS ----------
-const VAPID_PUBLIC_KEY = document.currentScript?.dataset?.vapidKey || '';
 
 async function registerPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;

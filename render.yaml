@@ -13,6 +13,12 @@ services:
         fromDatabase:
           name: preptracker-db
           property: connectionString
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_EMAIL
+        sync: false
 
 databases:
   - name: preptracker-db
