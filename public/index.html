@@ -135,6 +135,7 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
     <div class="nav-logo"><span class="mark">🥩</span>PrepTracker</div>
     <div class="nav-right">
       <span id="navUserName" style="font-size:13px;font-weight:600;color:var(--dim)"></span>
+      <button class="btn btn-ghost btn-sm" onclick="go('seasoning')">🧂</button>
       <button class="btn btn-ghost btn-sm" onclick="go('settings')" data-i18n="settings">⚙️</button>
       <button class="btn btn-ghost btn-sm" onclick="doLogout()" data-i18n="logout">Log out</button>
     </div>
@@ -165,6 +166,7 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
   <div class="wrap">
     <div class="sec-head" style="margin-top:20px">
       <div><h2 data-i18n="toProcess">To Process</h2><p data-i18n="toProcessSub">Log your progress below</p></div>
+      <button class="btn btn-ghost btn-sm" onclick="go('seasoning')">🧂</button>
       <button class="btn btn-ghost btn-sm" onclick="go('prep-history')" data-i18n="history">History →</button>
     </div>
     <div id="prepInventory"></div>
@@ -224,6 +226,49 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
   </nav>
   <div class="wrap" style="margin-top:20px">
     <div id="prepHistoryList"></div>
+  </div>
+</div>
+
+<!-- SEASONING CALCULATOR -->
+<div class="page" id="seasoning">
+  <nav class="nav">
+    <div class="nav-logo"><button class="btn btn-ghost btn-sm" id="seasoningBack">← Back</button></div>
+    <div class="nav-right"><span style="font-weight:800;color:var(--sea-deep)">🧂 Seasoning</span></div>
+  </nav>
+  <div class="wrap" style="margin-top:20px">
+    <div class="card">
+      <div style="font-weight:800;font-size:17px;margin-bottom:4px">Protein weight</div>
+      <div style="color:var(--dim);font-size:13px;margin-bottom:20px">Works for steak, chicken, and burgers</div>
+      <div class="field">
+        <label>Weight (kg)</label>
+        <input type="number" id="seasonKg" step="0.1" min="0" placeholder="e.g. 20"
+               style="font-size:28px;font-weight:800;text-align:center;letter-spacing:-1px"
+               oninput="calcSeasoning()">
+      </div>
+    </div>
+    <div class="card" id="seasonResults" style="display:none">
+      <div style="font-weight:800;font-size:15px;margin-bottom:16px;color:var(--sea-deep)">Amounts to use</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid var(--line)">
+        <span style="font-weight:600">Compleet seasoning</span>
+        <span style="font-weight:800;font-size:17px" id="sCompleet">—</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid var(--line)">
+        <span style="font-weight:600">Badia green seasoning</span>
+        <span style="font-weight:800;font-size:17px" id="sBadia">—</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid var(--line)">
+        <span style="font-weight:600">Chicken seasoning</span>
+        <span style="font-weight:800;font-size:17px" id="sChicken">—</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid var(--line)">
+        <span style="font-weight:600">Paprika seasoning</span>
+        <span style="font-weight:800;font-size:17px" id="sPaprika">—</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px;margin-top:12px;background:rgba(255,170,0,.12);border-radius:12px;border:1.5px solid rgba(255,170,0,.3)">
+        <span style="font-weight:800;font-size:15px;color:var(--ink)">🫙 Oil (total dry)</span>
+        <span style="font-weight:800;font-size:20px;color:#a06800" id="sOil">—</span>
+      </div>
+    </div>
   </div>
 </div>
 

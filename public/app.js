@@ -40,6 +40,12 @@ function go(id){
   if (id === 'dropoff-list') loadDropoffList();
   if (id === 'settings') loadSettings();
   if (id === 'prep-history') loadPrepHistory();
+  if (id === 'seasoning') {
+    $('seasonKg').value = '';
+    $('seasonResults').style.display = 'none';
+    const back = $('seasoningBack');
+    if (back) back.onclick = () => go(CURRENT_USER?.role === 'owner' ? 'owner-home' : 'prep-home');
+  }
 }
 
 async function api(path, opts = {}) {
@@ -473,6 +479,23 @@ async function registerPush() {
     });
     await api('/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription: sub }) });
   } catch(e) { console.log('push setup:', e.message); }
+}
+
+// ---------- SEASONING CALCULATOR ----------
+function calcSeasoning() {
+  const kg = parseFloat($('seasonKg').value) || 0;
+  if (kg <= 0) { $('seasonResults').style.display = 'none'; return; }
+  const compleet = kg * 0.25;
+  const badia    = kg * 0.25;
+  const chicken  = kg * 0.25;
+  const paprika  = kg * 0.125;
+  const oil      = compleet + badia + chicken + paprika;
+  $('sCompleet').textContent = compleet.toFixed(2) + ' oz';
+  $('sBadia').textContent    = badia.toFixed(2)    + ' oz';
+  $('sChicken').textContent  = chicken.toFixed(2)  + ' oz';
+  $('sPaprika').textContent  = paprika.toFixed(2)  + ' oz';
+  $('sOil').textContent      = oil.toFixed(2)      + ' oz';
+  $('seasonResults').style.display = 'block';
 }
 
 function urlBase64ToUint8Array(base64String) {
