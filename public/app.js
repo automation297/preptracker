@@ -339,3 +339,90 @@ async function changePin() {
     $('pinUserId').value = '';
   } catch(e) { toast(e.message); }
 }
+
+// ---------- PREP: home dashboard ----------
+async function loadPrepHome() {
+  $('prepUserName').textContent = CURRENT_USER.name;
+  try {
+    const inv = await api('/inventory');
+    const el = $('prepInventory');
+    if (!inv.proteins.length && !inv.supplies.length) {
+      el.innerHTML = `<div class="empty"><h3>${t('noInventory')}</h3><p>Nothing to process right now.</p></div>`;
+      return;
+    }
+    let html = '';
+    inv.proteins.forEach(p => {
+      const kg = parseFloat(p.latest_kg_done);
+      const total = parseFloat(p.weight_kg);
+      const pct = total > 0 ? Math.min(100, Math.round((kg / total) * 100)) : 0;
+      html += `<div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+          <div>
+            <div class="protein-name">${esc(p.protein_name)}</div>
+            <div class="protein-weight">${fmtKg(kg)} ${t('of')} ${fmtKg(total)}</div>
+            ${p.latest_note ? `<div class="protein-note">"${esc(p.latest_note)}"</div>` : ''}
+          </div>
+          ${statusBadge(p.status)}
+        </div>
+        <div style="background:var(--line);border-radius:99px;height:8px;margin-bottom:14px">
+          <div style="background:var(--sea);height:8px;border-radius:99px;width:${pct}%;transition:.3s"></div>
+        </div>
+        ${p.status === 'in_progress' ? `
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" style="flex:1" onclick="openLogProgress(${p.id},'${esc(p.protein_name)}',${p.weight_kg})">${t('logProgress')}</button>
+            <button class="btn btn-ghost btn-sm" onclick="markReady(${p.id})">${t('markReady')}</button>
+          </div>` : ''}
+      </div>`;
+    });
+    if (inv.supplies.length) {
+      html += `<div class="card"><div style="font-weight:700;margin-bottom:10px">📦 Supplies available</div>`;
+      html += inv.supplies.map(s => `<div class="protein-row"><span>${esc(s.name)}</span><span>${esc(s.amount)}</span></div>`).join('');
+      html += '</div>';
+    }
+    el.innerHTML = html;
+  } catch(e) { toast(e.message); }
+}
+
+// ---------- PREP: log progress ----------
+let LOG_PROTEIN_ID = null;
+
+function openLogProgress(id, name, weightKg) {
+  LOG_PROTEIN_ID = id;
+  $('logProgressTitle').textContent = name;
+  $('logProgressForm').innerHTML = `
+    <div class="card">
+      <div style="font-weight:800;margin-bottom:4px">${esc(name)}</div>
+      <div style="color:var(--dim);font-size:14px;margin-bottom:20px">Total: ${fmtKg(weightKg)}</div>
+      <div class="field">
+        <label>${t('kgDone')}</label>
+        <input type="number" id="lgKg" step="0.1" min="0" max="${weightKg}" placeholder="e.g. 45.5" style="font-size:20px;font-weight:700">
+      </div>
+      <div class="field">
+        <label>${t('note')}</label>
+        <textarea id="lgNote" rows="2" placeholder="e.g. Marinating overnight"></textarea>
+      </div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:16px;height:52px" onclick="submitProgress()">${t('save')}</button>
+    </div>`;
+  go('log-progress');
+}
+
+async function submitProgress() {
+  const kg = parseFloat($('lgKg').value);
+  if (isNaN(kg) || kg < 0) { toast('Enter a valid weight.'); return; }
+  const note = $('lgNote').value.trim();
+  try {
+    await api('/proteins/' + LOG_PROTEIN_ID + '/log', { method: 'POST', body: JSON.stringify({ kg_done: kg, note }) });
+    toast('Progress saved!');
+    go('prep-home');
+    loadPrepHome();
+  } catch(e) { toast(e.message); }
+}
+
+async function markReady(id) {
+  if (!confirm('Mark this protein as ready for pickup?')) return;
+  try {
+    await api('/proteins/' + id + '/ready', { method: 'PATCH' });
+    toast('Marked ready!');
+    loadPrepHome();
+  } catch(e) { toast(e.message); }
+}
