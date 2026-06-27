@@ -36,6 +36,10 @@ router.post('/', requireAuth, requireOwner, async (req, res) => {
       }
     }
     await client.query('COMMIT');
+    // Notify all prep users
+    const { rows: prepUsers } = await pool.query("SELECT id FROM users WHERE role='prep'");
+    const proteinNames = proteins.map(p => p.protein_name).join(', ');
+    req.app.get('notify')(prepUsers.map(u => u.id), 'New drop-off!', proteinNames + ' ready to prep').catch(()=>{});
     res.json({ ok: true, dropoff: dr.rows[0] });
   } catch (e) {
     await client.query('ROLLBACK');

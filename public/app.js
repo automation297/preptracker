@@ -104,16 +104,17 @@ async function submitPin() {
   }
 }
 
-function afterLogin() {
+async function afterLogin() {
   if ($('navUserName')) $('navUserName').textContent = CURRENT_USER.name;
   if ($('prepUserName')) $('prepUserName').textContent = CURRENT_USER.name;
-  if (CURRENT_USER.role === 'owner') {
-    go('owner-home');
-    loadOwnerHome();
-  } else {
-    go('prep-home');
-    loadPrepHome();
-  }
+  // Register push after login
+  try {
+    const { key } = await api('/vapid-key');
+    if (key && $('vapidKey')) $('vapidKey').dataset.key = key;
+    registerPush();
+  } catch(e) {}
+  if (CURRENT_USER.role === 'owner') { go('owner-home'); loadOwnerHome(); }
+  else { go('prep-home'); loadPrepHome(); }
 }
 
 async function doLogout() {
@@ -429,4 +430,29 @@ async function markReady(id) {
 
 function handleLogProgress(el) {
   openLogProgress(Number(el.dataset.pid), el.dataset.pname, Number(el.dataset.pweight));
+}
+
+// ---------- PUSH NOTIFICATIONS ----------
+const VAPID_PUBLIC_KEY = document.currentScript?.dataset?.vapidKey || '';
+
+async function registerPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') return;
+    const existing = await reg.pushManager.getSubscription();
+    const sub = existing || await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(document.getElementById('vapidKey')?.dataset?.key || ''),
+    });
+    await api('/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription: sub }) });
+  } catch(e) { console.log('push setup:', e.message); }
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }

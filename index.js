@@ -6,9 +6,34 @@ const session  = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 const path     = require('path');
 const pool     = require('./db/pool');
+const webPush  = require('web-push');
+
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webPush.setVapidDetails(
+    process.env.VAPID_EMAIL || 'mailto:admin@preptracker.app',
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+}
+
+async function notify(userIds, title, body) {
+  if (!process.env.VAPID_PUBLIC_KEY) return;
+  try {
+    const { rows } = await pool.query(
+      'SELECT push_subscription FROM users WHERE id = ANY($1) AND push_subscription IS NOT NULL',
+      [userIds]
+    );
+    await Promise.all(rows.map(r =>
+      webPush.sendNotification(r.push_subscription, JSON.stringify({ title, body }))
+        .catch(e => console.error('push send error:', e.message))
+    ));
+  } catch (e) { console.error('notify error:', e.message); }
+}
 
 const app    = express();
 const PORT   = process.env.PORT || 3000;
+
+app.set('notify', notify);
 const isProd = process.env.NODE_ENV === 'production';
 
 if (isProd && (!process.env.SESSION_SECRET || process.env.SESSION_SECRET === 'preptracker-dev-secret')) {
@@ -54,6 +79,8 @@ app.use('/api/dropoffs',  require('./routes/dropoffs'));
 app.use('/api/proteins',  require('./routes/proteins'));
 app.use('/api/inventory', require('./routes/inventory'));
 app.use('/api/push',      require('./routes/push'));
+
+app.get('/api/vapid-key', (req, res) => res.json({ key: process.env.VAPID_PUBLIC_KEY || '' }));
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 

@@ -43,6 +43,11 @@ router.patch('/:id/ready', requireAuth, requirePrep, async (req, res) => {
       [req.params.id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Protein not found or already ready.' });
+    // Notify all owner users
+    const { rows: owners } = await pool.query("SELECT id FROM users WHERE role='owner'");
+    const { rows: prot } = await pool.query('SELECT protein_name FROM dropoff_proteins WHERE id=$1', [req.params.id]);
+    const name = prot[0]?.protein_name || 'A protein';
+    req.app.get('notify')(owners.map(u => u.id), '✅ Ready for pickup!', name + ' is ready.').catch(()=>{});
     res.json({ ok: true });
   } catch (e) {
     console.error('mark ready error:', e.message);
