@@ -369,7 +369,7 @@ async function loadPrepHome() {
         </div>
         ${p.status === 'in_progress' ? `
           <div style="display:flex;gap:8px">
-            <button class="btn btn-primary btn-sm" style="flex:1" onclick="openLogProgress(${p.id},'${esc(p.protein_name)}',${p.weight_kg})">${t('logProgress')}</button>
+            <button class="btn btn-primary btn-sm" style="flex:1" data-pid="${Number(p.id)}" data-pname="${esc(p.protein_name)}" data-pweight="${Number(p.weight_kg)}" onclick="handleLogProgress(this)">${t('logProgress')}</button>
             <button class="btn btn-ghost btn-sm" onclick="markReady(${p.id})">${t('markReady')}</button>
           </div>` : ''}
       </div>`;
@@ -425,4 +425,8 @@ async function markReady(id) {
     toast('Marked ready!');
     loadPrepHome();
   } catch(e) { toast(e.message); }
+}
+
+function handleLogProgress(el) {
+  openLogProgress(Number(el.dataset.pid), el.dataset.pname, Number(el.dataset.pweight));
 }
