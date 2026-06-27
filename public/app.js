@@ -39,6 +39,7 @@ function go(id){
   if (id === 'new-dropoff') { supplyCount = 0; renderDropoffForm(); }
   if (id === 'dropoff-list') loadDropoffList();
   if (id === 'settings') loadSettings();
+  if (id === 'prep-history') loadPrepHistory();
 }
 
 async function api(path, opts = {}) {
@@ -430,6 +431,31 @@ async function markReady(id) {
 
 function handleLogProgress(el) {
   openLogProgress(Number(el.dataset.pid), el.dataset.pname, Number(el.dataset.pweight));
+}
+
+// ---------- PREP: history ----------
+async function loadPrepHistory() {
+  const el = $('prepHistoryList');
+  el.innerHTML = '<div class="empty"><p>Loading…</p></div>';
+  try {
+    const { dropoffs } = await api('/dropoffs');
+    const done = dropoffs.filter(d => d.status === 'picked_up');
+    if (!done.length) {
+      el.innerHTML = `<div class="empty"><h3>${t('noInventory')}</h3><p>No completed batches yet.</p></div>`;
+      return;
+    }
+    el.innerHTML = done.map(d => `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-weight:700">${fmtDate(d.dropped_at)}</div>
+            <div style="font-size:13px;color:var(--dim)">${d.protein_count} protein${Number(d.protein_count) !== 1 ? 's' : ''}</div>
+            ${d.picked_up_at ? `<div style="font-size:12px;color:var(--dim);margin-top:2px">Picked up ${fmtDate(d.picked_up_at)}</div>` : ''}
+          </div>
+          <span class="badge badge-picked">${t('pickedUp')}</span>
+        </div>
+      </div>`).join('');
+  } catch(e) { el.innerHTML = `<div class="empty"><p>${e.message}</p></div>`; }
 }
 
 // ---------- PUSH NOTIFICATIONS ----------

@@ -165,6 +165,7 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
   <div class="wrap">
     <div class="sec-head" style="margin-top:20px">
       <div><h2 data-i18n="toProcess">To Process</h2><p data-i18n="toProcessSub">Log your progress below</p></div>
+      <button class="btn btn-ghost btn-sm" onclick="go('prep-history')" data-i18n="history">History →</button>
     </div>
     <div id="prepInventory"></div>
   </div>
@@ -212,6 +213,17 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
   </nav>
   <div class="wrap" style="margin-top:20px">
     <div id="logProgressForm"></div>
+  </div>
+</div>
+
+<!-- PREP HISTORY -->
+<div class="page" id="prep-history">
+  <nav class="nav">
+    <div class="nav-logo"><button class="btn btn-ghost btn-sm" onclick="go('prep-home')">← Back</button></div>
+    <div class="nav-right"><span style="font-weight:800;color:var(--sea-deep)" data-i18n="history">History</span></div>
+  </nav>
+  <div class="wrap" style="margin-top:20px">
+    <div id="prepHistoryList"></div>
   </div>
 </div>
 
