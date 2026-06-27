@@ -36,6 +36,9 @@ function go(id){
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const pg = $(id); if (pg) pg.classList.add('active');
   window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (id === 'new-dropoff') { supplyCount = 0; renderDropoffForm(); }
+  if (id === 'dropoff-list') loadDropoffList();
+  if (id === 'settings') loadSettings();
 }
 
 async function api(path, opts = {}) {
@@ -128,3 +131,211 @@ async function doLogout() {
     else go('pin');
   } catch(e) { go('pin'); }
 })();
+
+// ---------- OWNER: inventory dashboard ----------
+async function loadOwnerHome() {
+  $('navUserName').textContent = CURRENT_USER.name;
+  try {
+    const inv = await api('/inventory');
+    renderOwnerInventory(inv);
+  } catch(e) { $('ownerInventory').innerHTML = `<div class="empty"><h3>${t('noInventory')}</h3></div>`; }
+  try {
+    const dl = await api('/dropoffs');
+    $('ownerRecentList').innerHTML = dl.dropoffs.slice(0,3).map(dropoffCard).join('') ||
+      `<div class="empty"><h3>${t('noInventory')}</h3></div>`;
+  } catch(e) {}
+}
+
+function renderOwnerInventory(inv) {
+  const el = $('ownerInventory');
+  if (!inv.proteins.length && !inv.supplies.length) {
+    el.innerHTML = `<div class="empty"><h3>${t('noInventory')}</h3><p>Drop something off to get started.</p></div>`;
+    return;
+  }
+  // Group proteins by status
+  const ready = inv.proteins.filter(p => p.status === 'ready');
+  const inProg = inv.proteins.filter(p => p.status === 'in_progress');
+
+  let html = '';
+  if (ready.length) {
+    html += `<div class="card" style="border-left:4px solid var(--green)">
+      <div style="font-weight:800;margin-bottom:12px;color:var(--green)">✅ ${t('ready')}</div>`;
+    html += ready.map(p => proteinRowHtml(p)).join('');
+    html += `<button class="btn btn-coral" style="width:100%;justify-content:center;margin-top:16px" onclick="openDropoff(${ready[0].dropoff_id})">${t('confirmPickup')} →</button>`;
+    html += '</div>';
+  }
+  if (inProg.length) {
+    html += `<div class="card">
+      <div style="font-weight:800;margin-bottom:12px;color:var(--mango)">🟡 ${t('inProgress')}</div>`;
+    html += inProg.map(p => proteinRowHtml(p)).join('');
+    html += '</div>';
+  }
+  if (inv.supplies.length) {
+    html += `<div class="card"><div style="font-weight:800;margin-bottom:12px">📦 Supplies</div>`;
+    html += inv.supplies.map(s => `<div class="protein-row"><span class="protein-name">${esc(s.name)}</span><span class="protein-weight">${esc(s.amount)}</span></div>`).join('');
+    html += '</div>';
+  }
+  el.innerHTML = html;
+}
+
+function proteinRowHtml(p) {
+  const kg = parseFloat(p.latest_kg_done);
+  const total = parseFloat(p.weight_kg);
+  return `<div class="protein-row">
+    <div>
+      <div class="protein-name">${esc(p.protein_name)}</div>
+      <div class="protein-weight">${fmtKg(kg)} ${t('of')} ${fmtKg(total)}</div>
+      ${p.latest_note ? `<div class="protein-note">"${esc(p.latest_note)}"</div>` : ''}
+    </div>
+    ${statusBadge(p.status)}
+  </div>`;
+}
+
+function dropoffCard(d) {
+  const allReady = Number(d.ready_count) === Number(d.protein_count);
+  const badge = d.status === 'picked_up' ? statusBadge('picked_up') :
+    allReady ? statusBadge('ready') : statusBadge('in_progress');
+  return `<div class="card" style="cursor:pointer" onclick="openDropoff(${d.id})">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-weight:700">${fmtDate(d.dropped_at)}</div>
+        <div style="font-size:13px;color:var(--dim)">${d.protein_count} proteins · by ${esc(d.dropped_by)}</div>
+      </div>
+      ${badge}
+    </div>
+  </div>`;
+}
+
+// ---------- OWNER: drop-off list ----------
+async function loadDropoffList() {
+  try {
+    const dl = await api('/dropoffs');
+    $('dropoffList').innerHTML = dl.dropoffs.map(dropoffCard).join('') ||
+      `<div class="empty"><h3>${t('noInventory')}</h3></div>`;
+  } catch(e) { toast(e.message); }
+}
+
+// ---------- OWNER: drop-off detail ----------
+let CURRENT_DROPOFF_ID = null;
+async function openDropoff(id) {
+  CURRENT_DROPOFF_ID = id;
+  go('dropoff-detail');
+  try {
+    const { dropoff: d } = await api('/dropoffs/' + id);
+    const allReady = d.proteins.length > 0 && d.proteins.every(p => p.status === 'ready');
+    let html = `<div style="margin-bottom:16px">
+      <div style="font-size:14px;color:var(--dim)">${fmtDate(d.dropped_at)}</div>
+      ${d.notes ? `<div style="margin-top:6px;font-style:italic;color:var(--dim)">${esc(d.notes)}</div>` : ''}
+    </div>`;
+    html += d.proteins.map(p => `
+      <div class="card" style="padding:16px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div class="protein-name">${esc(p.protein_name)}</div>
+            <div class="protein-weight">${fmtKg(p.latest_kg_done)} ${t('of')} ${fmtKg(p.weight_kg)}</div>
+            ${p.latest_note ? `<div class="protein-note">"${esc(p.latest_note)}"</div>` : ''}
+          </div>
+          ${statusBadge(p.status)}
+        </div>
+      </div>`).join('');
+    if (d.supplies.length) {
+      html += `<div class="card"><div style="font-weight:700;margin-bottom:10px">Supplies</div>`;
+      html += d.supplies.map(s => `<div class="protein-row"><span>${esc(s.name)}</span><span>${esc(s.amount)}</span></div>`).join('');
+      html += '</div>';
+    }
+    if (d.status === 'open' && allReady) {
+      html += `<button class="btn btn-coral" style="width:100%;justify-content:center;margin-top:16px" onclick="confirmPickup(${d.id})">${t('confirmPickup')}</button>`;
+    }
+    $('dropoffDetail').innerHTML = html;
+  } catch(e) { toast(e.message); }
+}
+
+async function confirmPickup(id) {
+  if (!confirm('Confirm pickup of this drop-off?')) return;
+  try {
+    await api('/dropoffs/' + id + '/pickup', { method: 'POST' });
+    toast('Pickup confirmed!');
+    go('owner-home');
+    loadOwnerHome();
+  } catch(e) { toast(e.message); }
+}
+
+// ---------- OWNER: new drop-off form ----------
+const PROTEINS = ['Flank Steak','Chicken Breast','Chicken Wings','Chicharron / Pork Belly','Burger Meat / Carni Mula','Bacon'];
+
+function renderDropoffForm() {
+  let html = '<div class="card">';
+  html += '<div style="font-weight:800;margin-bottom:16px">Proteins (kg)</div>';
+  html += PROTEINS.map(name => `
+    <div class="field">
+      <label>${esc(name)}</label>
+      <input type="number" step="0.1" min="0" id="p_${esc(name.replace(/[^a-z]/gi,'_'))}" placeholder="e.g. 25.5">
+    </div>`).join('');
+  html += '</div>';
+  html += '<div class="card" style="margin-top:0"><div style="font-weight:800;margin-bottom:16px">Supplies</div>';
+  html += '<div id="suppliesRows"></div>';
+  html += `<button class="btn btn-ghost btn-sm" onclick="addSupplyRow()">+ Add supply</button>`;
+  html += '</div>';
+  html += '<div class="field" style="margin-top:12px"><label>Notes (optional)</label><textarea id="dropoffNotes" rows="2"></textarea></div>';
+  $('dropoffForm').innerHTML = html;
+  addSupplyRow();
+}
+
+let supplyCount = 0;
+function addSupplyRow() {
+  supplyCount++;
+  const div = document.createElement('div');
+  div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:10px';
+  div.id = 'sup_' + supplyCount;
+  div.innerHTML = `
+    <input type="text" placeholder="Name (e.g. Salt)" id="sname_${supplyCount}">
+    <input type="text" placeholder="Amount (e.g. 500g)" id="samt_${supplyCount}">
+    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('sup_${supplyCount}').remove()">✕</button>`;
+  $('suppliesRows').appendChild(div);
+}
+
+async function submitDropoff() {
+  const proteins = PROTEINS
+    .map(name => ({ protein_name: name, weight_kg: parseFloat(document.getElementById('p_'+name.replace(/[^a-z]/gi,'_'))?.value||0)||0 }))
+    .filter(p => p.weight_kg > 0);
+  if (!proteins.length) { toast('Add at least one protein weight.'); return; }
+
+  const supplies = [];
+  for (let i = 1; i <= supplyCount; i++) {
+    const n = document.getElementById('sname_'+i), a = document.getElementById('samt_'+i);
+    if (n && a && n.value.trim() && a.value.trim()) supplies.push({ name: n.value.trim(), amount: a.value.trim() });
+  }
+  const notes = $('dropoffNotes')?.value.trim();
+  try {
+    await api('/dropoffs', { method: 'POST', body: JSON.stringify({ proteins, supplies, notes }) });
+    toast('Drop-off saved!');
+    go('owner-home');
+    loadOwnerHome();
+    supplyCount = 0;
+  } catch(e) { toast(e.message); }
+}
+
+// ---------- OWNER: settings (change PINs) ----------
+async function loadSettings() {
+  $('settingsContent').innerHTML = `
+    <div class="card">
+      <div style="font-weight:800;margin-bottom:16px">${t('pinChange')}</div>
+      <div class="field"><label>User ID (1=Owner, 2=Franklin, 3=Mama Franklin)</label>
+        <input type="number" id="pinUserId" min="1" max="3" placeholder="e.g. 2"></div>
+      <div class="field"><label>New PIN (6 digits)</label>
+        <input type="text" id="newPinVal" maxlength="6" placeholder="••••••" inputmode="numeric"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="changePin()">${t('save')}</button>
+    </div>`;
+}
+
+async function changePin() {
+  const userId = $('pinUserId').value;
+  const pin = $('newPinVal').value.trim();
+  if (!/^\d{6}$/.test(pin)) { toast('PIN must be exactly 6 digits.'); return; }
+  try {
+    await api('/auth/pin/'+userId, { method: 'PATCH', body: JSON.stringify({ pin }) });
+    toast('PIN updated!');
+    $('newPinVal').value = '';
+    $('pinUserId').value = '';
+  } catch(e) { toast(e.message); }
+}
