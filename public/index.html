@@ -85,6 +85,16 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
 /* EMPTY STATE */
 .empty{text-align:center;padding:48px 24px;color:var(--dim)}
 .empty h3{font-size:18px;font-weight:700;margin-bottom:8px;color:var(--ink)}
+
+/* Mobile: ensure all buttons are at least 48px tall */
+@media(max-width:480px){
+  .btn { min-height:48px; }
+  .pin-key { height:72px; font-size:28px; }
+  .pin-card { padding:28px 20px; }
+  .wrap { padding:16px 12px; }
+  .card { padding:16px; }
+  .field input, .field select, .field textarea { font-size:16px; } /* prevents iOS zoom */
+}
 </style>
 </head>
 <body>
