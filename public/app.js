@@ -489,11 +489,13 @@ function calcSeasoning() {
   const badia    = kg * 0.25;
   const chicken  = kg * 0.25;
   const paprika  = kg * 0.125;
-  const oil      = compleet + badia + chicken + paprika;
+  const maggi    = kg * 0.25;
+  const oil      = compleet + badia + chicken + paprika + maggi;
   $('sCompleet').textContent = compleet.toFixed(2) + ' oz';
   $('sBadia').textContent    = badia.toFixed(2)    + ' oz';
   $('sChicken').textContent  = chicken.toFixed(2)  + ' oz';
   $('sPaprika').textContent  = paprika.toFixed(2)  + ' oz';
+  $('sMaggi').textContent    = maggi.toFixed(2)    + ' oz';
   $('sOil').textContent      = oil.toFixed(2)      + ' oz';
   $('seasonResults').style.display = 'block';
 }
