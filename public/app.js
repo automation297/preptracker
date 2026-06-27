@@ -490,7 +490,7 @@ function calcSeasoning() {
   const chicken  = kg * 0.25;
   const paprika  = kg * 0.125;
   const maggi    = kg * 0.25;
-  const oil      = compleet + badia + chicken + paprika + maggi;
+  const oil      = compleet + badia + chicken + paprika;
   $('sCompleet').textContent = compleet.toFixed(2) + ' oz';
   $('sBadia').textContent    = badia.toFixed(2)    + ' oz';
   $('sChicken').textContent  = chicken.toFixed(2)  + ' oz';
