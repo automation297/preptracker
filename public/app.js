@@ -46,6 +46,14 @@ function go(id){
     const back = $('seasoningBack');
     if (back) back.onclick = () => go(CURRENT_USER?.role === 'owner' ? 'owner-home' : 'prep-home');
   }
+  if (id === 'portions') {
+    $('portionKg').value = '';
+    $('portionResults').style.display = 'none';
+    ['pPlanS','pPlanM','pPlanL','pPlanW','pPlanB'].forEach(id => { const el = $(id); if(el) el.value = ''; });
+    $('planResult').style.display = 'none';
+    const back = $('portionsBack');
+    if (back) back.onclick = () => go(CURRENT_USER?.role === 'owner' ? 'owner-home' : 'prep-home');
+  }
 }
 
 async function api(path, opts = {}) {
@@ -479,6 +487,56 @@ async function registerPush() {
     });
     await api('/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription: sub }) });
   } catch(e) { console.log('push setup:', e.message); }
+}
+
+// ---------- PORTION CALCULATOR ----------
+const PORTION_SIZES = [
+  { label: 'Basket Small',  sub: '6 oz each',  g: 170 },
+  { label: 'Basket Medium', sub: '10 oz each', g: 283 },
+  { label: 'Basket Large',  sub: '12 oz each', g: 340 },
+  { label: 'Wrap / Burrito / Quesadilla / Sandwich', sub: '8 oz each', g: 227 },
+  { label: 'Burger',        sub: '6 oz each',  g: 170 },
+];
+
+function calcPortions() {
+  const kg = parseFloat($('portionKg').value) || 0;
+  if (kg <= 0) { $('portionResults').style.display = 'none'; return; }
+  const grams = kg * 1000;
+  let html = '';
+  PORTION_SIZES.forEach((p, i) => {
+    const count = Math.floor(grams / p.g);
+    const isLast = i === PORTION_SIZES.length - 1;
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:13px 0;${isLast ? '' : 'border-bottom:1px solid var(--line)'}">
+      <div>
+        <div style="font-weight:600">${p.label}</div>
+        <div style="font-size:12px;color:var(--dim)">${p.sub}</div>
+      </div>
+      <div style="font-weight:800;font-size:22px;color:var(--sea-deep)">${count}</div>
+    </div>`;
+  });
+  $('portionRows').innerHTML = html;
+  $('portionResults').style.display = 'block';
+}
+
+function calcPlan() {
+  const s = parseInt($('pPlanS').value) || 0;
+  const m = parseInt($('pPlanM').value) || 0;
+  const l = parseInt($('pPlanL').value) || 0;
+  const w = parseInt($('pPlanW').value) || 0;
+  const b = parseInt($('pPlanB').value) || 0;
+  const total = s + m + l + w + b;
+  if (total === 0) { $('planResult').style.display = 'none'; return; }
+  const totalG = (s * 170) + (m * 283) + (l * 340) + (w * 227) + (b * 170);
+  const totalKg = (totalG / 1000).toFixed(2);
+  $('planKg').textContent = totalKg + ' kg';
+  const parts = [];
+  if (s) parts.push(s + ' S');
+  if (m) parts.push(m + ' M');
+  if (l) parts.push(l + ' L');
+  if (w) parts.push(w + ' wrap');
+  if (b) parts.push(b + ' burger');
+  $('planPortions').textContent = parts.join(' · ') + ' = ' + total + ' total portions';
+  $('planResult').style.display = 'block';
 }
 
 // ---------- SEASONING CALCULATOR ----------

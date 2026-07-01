@@ -136,6 +136,7 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
     <div class="nav-right">
       <span id="navUserName" style="font-size:13px;font-weight:600;color:var(--dim)"></span>
       <button class="btn btn-ghost btn-sm" onclick="go('seasoning')">🧂</button>
+      <button class="btn btn-ghost btn-sm" onclick="go('portions')">🍽️</button>
       <button class="btn btn-ghost btn-sm" onclick="go('settings')" data-i18n="settings">⚙️</button>
       <button class="btn btn-ghost btn-sm" onclick="doLogout()" data-i18n="logout">Log out</button>
     </div>
@@ -167,6 +168,7 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
     <div class="sec-head" style="margin-top:20px">
       <div><h2 data-i18n="toProcess">To Process</h2><p data-i18n="toProcessSub">Log your progress below</p></div>
       <button class="btn btn-ghost btn-sm" onclick="go('seasoning')">🧂</button>
+      <button class="btn btn-ghost btn-sm" onclick="go('portions')">🍽️</button>
       <button class="btn btn-ghost btn-sm" onclick="go('prep-history')" data-i18n="history">History →</button>
     </div>
     <div id="prepInventory"></div>
@@ -274,6 +276,47 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
           <span style="font-weight:600">Maggi seasoning</span>
           <span style="font-weight:800;font-size:17px;color:var(--sea-deep)" id="sMaggi">—</span>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PORTIONS CALCULATOR -->
+<div class="page" id="portions">
+  <nav class="nav">
+    <div class="nav-logo"><button class="btn btn-ghost btn-sm" id="portionsBack">← Back</button></div>
+    <div class="nav-right"><span style="font-weight:800;color:var(--sea-deep)">🍽️ Portions</span></div>
+  </nav>
+  <div class="wrap" style="margin-top:20px">
+    <div class="card">
+      <div style="font-weight:800;font-size:17px;margin-bottom:4px">How many portions?</div>
+      <div style="color:var(--dim);font-size:13px;margin-bottom:20px">Steak · Chicken Breast — enter total kg to prep</div>
+      <div class="field">
+        <label>Weight (kg)</label>
+        <input type="number" id="portionKg" step="0.1" min="0" placeholder="e.g. 50"
+               style="font-size:28px;font-weight:800;text-align:center;letter-spacing:-1px"
+               oninput="calcPortions()">
+      </div>
+    </div>
+    <div class="card" id="portionResults" style="display:none">
+      <div style="font-weight:800;font-size:15px;margin-bottom:4px;color:var(--sea-deep)">Max portions from this weight</div>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:16px">Raw weight — actual yield ~15–20% fewer after cooking</div>
+      <div id="portionRows"></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div style="font-weight:800;font-size:15px;margin-bottom:4px;color:var(--sea-deep)">Plan your night</div>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:16px">Enter how many of each you need → see kg required</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div class="field"><label>Basket S (6 oz)</label><input type="number" id="pPlanS" min="0" placeholder="0" oninput="calcPlan()"></div>
+        <div class="field"><label>Basket M (10 oz)</label><input type="number" id="pPlanM" min="0" placeholder="0" oninput="calcPlan()"></div>
+        <div class="field"><label>Basket L (12 oz)</label><input type="number" id="pPlanL" min="0" placeholder="0" oninput="calcPlan()"></div>
+        <div class="field"><label>Wrap / Burrito / Quesadilla (8 oz)</label><input type="number" id="pPlanW" min="0" placeholder="0" oninput="calcPlan()"></div>
+        <div class="field"><label>Burger (6 oz)</label><input type="number" id="pPlanB" min="0" placeholder="0" oninput="calcPlan()"></div>
+      </div>
+      <div id="planResult" style="display:none;padding:16px;background:rgba(10,140,154,.07);border-radius:12px;border:1.5px solid rgba(10,140,154,.25);text-align:center">
+        <div style="font-size:13px;color:var(--dim);margin-bottom:4px">Total protein needed</div>
+        <div id="planKg" style="font-size:32px;font-weight:800;color:var(--sea-deep)">—</div>
+        <div id="planPortions" style="font-size:12px;color:var(--dim);margin-top:4px"></div>
       </div>
     </div>
   </div>
