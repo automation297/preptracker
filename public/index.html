@@ -137,6 +137,8 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
       <span id="navUserName" style="font-size:13px;font-weight:600;color:var(--dim)"></span>
       <button class="btn btn-ghost btn-sm" onclick="go('seasoning')">🧂</button>
       <button class="btn btn-ghost btn-sm" onclick="go('portions')">🍽️</button>
+      <button class="btn btn-ghost btn-sm" onclick="go('purchases')">🛒</button>
+      <button class="btn btn-ghost btn-sm" onclick="go('stock')">📦</button>
       <button class="btn btn-ghost btn-sm" onclick="go('settings')" data-i18n="settings">⚙️</button>
       <button class="btn btn-ghost btn-sm" onclick="doLogout()" data-i18n="logout">Log out</button>
     </div>
@@ -161,6 +163,7 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
     <div class="nav-logo"><span class="mark">🥩</span>PrepTracker</div>
     <div class="nav-right">
       <span id="prepUserName" style="font-size:13px;font-weight:600;color:var(--dim)"></span>
+      <button class="btn btn-ghost btn-sm" onclick="go('stock')">📦</button>
       <button class="btn btn-ghost btn-sm" onclick="doLogout()" data-i18n="logout">Log out</button>
     </div>
   </nav>
@@ -361,6 +364,69 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
     <div class="nav-right"><span style="font-weight:800;color:var(--sea-deep)" data-i18n="settings">Settings</span></div>
   </nav>
   <div class="wrap" style="margin-top:20px" id="settingsContent"></div>
+</div>
+
+<!-- PURCHASES PAGE -->
+<div class="page" id="purchases">
+  <nav class="nav">
+    <div class="nav-logo"><button class="btn btn-ghost btn-sm" id="purchasesBack">← Back</button></div>
+    <div class="nav-right"><span style="font-weight:800;color:var(--sea-deep)">🛒 Purchases</span></div>
+  </nav>
+  <div class="wrap" style="margin-top:16px">
+    <!-- Quick add form -->
+    <div class="card" id="purchaseAddCard">
+      <div style="font-weight:800;font-size:15px;margin-bottom:12px;color:var(--sea-deep)">Log a purchase</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="field" style="grid-column:1/-1">
+          <label>Item</label>
+          <select id="pItem" onchange="onPurchaseItemChange()">
+            <option value="">— choose item —</option>
+          </select>
+        </div>
+        <div class="field" id="pCustomNameWrap" style="display:none;grid-column:1/-1">
+          <label>Item name</label>
+          <input type="text" id="pCustomName" placeholder="e.g. Avocado">
+        </div>
+        <div class="field">
+          <label>Price paid (FL)</label>
+          <input type="number" id="pPrice" min="0" step="0.5" placeholder="e.g. 75">
+        </div>
+        <div class="field">
+          <label>Qty / Amount</label>
+          <input type="number" id="pQty" min="0" step="0.1" placeholder="e.g. 8" oninput="updatePurchasePreview()">
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Unit</label>
+          <input type="text" id="pUnit" placeholder="kg / pieces / cans / packs / bottles">
+        </div>
+        <div class="field" style="grid-column:1/-1" id="pPackPreview" style="display:none"></div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Note (optional)</label>
+          <input type="text" id="pNote" placeholder="e.g. 8 packs of 12 = 96 pieces">
+        </div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:4px" onclick="submitPurchase()">Save purchase</button>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:8px;margin:16px 0 12px">
+      <button class="btn btn-sm" id="tabToday" onclick="switchPurchaseTab('today')" style="flex:1;justify-content:center">Today</button>
+      <button class="btn btn-sm" id="tabWeek"  onclick="switchPurchaseTab('week')"  style="flex:1;justify-content:center">This Week</button>
+      <button class="btn btn-sm" id="tabMonth" onclick="switchPurchaseTab('month')" style="flex:1;justify-content:center">This Month</button>
+    </div>
+    <div id="purchaseList"></div>
+  </div>
+</div>
+
+<!-- STOCK / KITCHEN COUNTDOWN PAGE -->
+<div class="page" id="stock">
+  <nav class="nav">
+    <div class="nav-logo"><button class="btn btn-ghost btn-sm" id="stockBack">← Back</button></div>
+    <div class="nav-right"><span style="font-weight:800;color:var(--sea-deep)">📦 Stock</span></div>
+  </nav>
+  <div class="wrap" style="margin-top:16px" id="stockContent">
+    <div class="empty"><p>Loading…</p></div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>

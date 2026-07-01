@@ -40,3 +40,40 @@ CREATE TABLE IF NOT EXISTS dropoff_supplies (
   name       TEXT NOT NULL,
   amount     TEXT NOT NULL
 );
+
+-- Purchase cost tracker
+CREATE TABLE IF NOT EXISTS purchases (
+  id         SERIAL PRIMARY KEY,
+  item_name  TEXT NOT NULL,
+  category   TEXT NOT NULL DEFAULT 'other',
+  price_fl   NUMERIC(8,2) NOT NULL,
+  qty        NUMERIC(10,2) NOT NULL,
+  unit       TEXT NOT NULL,
+  notes      TEXT,
+  bought_at  DATE NOT NULL DEFAULT CURRENT_DATE,
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Nightly shift sessions
+CREATE TABLE IF NOT EXISTS shift_sessions (
+  id         SERIAL PRIMARY KEY,
+  shift_date DATE NOT NULL UNIQUE,
+  status     TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed')),
+  opened_at  TIMESTAMPTZ DEFAULT NOW(),
+  closed_at  TIMESTAMPTZ
+);
+
+-- Per-item stock counts for each shift
+CREATE TABLE IF NOT EXISTS shift_stock (
+  id          SERIAL PRIMARY KEY,
+  shift_id    INTEGER REFERENCES shift_sessions(id) ON DELETE CASCADE,
+  item_name   TEXT NOT NULL,
+  category    TEXT NOT NULL DEFAULT 'other',
+  unit        TEXT NOT NULL DEFAULT 'portions',
+  start_qty   NUMERIC(8,1) NOT NULL,
+  current_qty NUMERIC(8,1) NOT NULL,
+  end_qty     NUMERIC(8,1),
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(shift_id, item_name)
+);

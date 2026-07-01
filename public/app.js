@@ -40,6 +40,19 @@ function go(id){
   if (id === 'dropoff-list') loadDropoffList();
   if (id === 'settings') loadSettings();
   if (id === 'prep-history') loadPrepHistory();
+  if (id === 'purchases') {
+    const back = $('purchasesBack');
+    if (back) back.onclick = () => go(CURRENT_USER?.role === 'owner' ? 'owner-home' : 'prep-home');
+    if (CURRENT_USER?.role === 'owner') { $('purchaseAddCard').style.display = ''; }
+    else { $('purchaseAddCard').style.display = 'none'; }
+    renderPurchaseItemDropdown();
+    switchPurchaseTab('today');
+  }
+  if (id === 'stock') {
+    const back = $('stockBack');
+    if (back) back.onclick = () => go(CURRENT_USER?.role === 'owner' ? 'owner-home' : 'prep-home');
+    loadStock();
+  }
   if (id === 'seasoning') {
     $('seasonKg').value = '';
     $('seasonResults').style.display = 'none';
@@ -592,4 +605,605 @@ function urlBase64ToUint8Array(base64String) {
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
   const raw = atob(base64);
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+// ============================================================
+// PURCHASES TRACKER
+// ============================================================
+
+const PURCHASE_ITEMS = [
+  // Proteins
+  { name:'Flank Steak',              category:'protein',    unit:'kg' },
+  { name:'Chicken Breast',           category:'protein',    unit:'kg' },
+  { name:'Chicken Wings',            category:'protein',    unit:'kg' },
+  { name:'Burger Meat / Carni Mula', category:'protein',    unit:'kg' },
+  { name:'Chicharron / Pork Belly',  category:'protein',    unit:'kg' },
+  { name:'Bacon',                    category:'protein',    unit:'kg' },
+  { name:'Hotdog / Salchicha',       category:'protein',    unit:'pieces', pack:10, packLabel:'packs of 10' },
+  // Bread
+  { name:'12" Tortilla',             category:'bread',      unit:'pieces', pack:12, packLabel:'packs of 12' },
+  { name:'Burger Bun',               category:'bread',      unit:'pieces', pack:8,  packLabel:'packs of 8' },
+  // Dairy / Cheese
+  { name:'Mozzarella Cheese',        category:'dairy',      unit:'kg', pack:2, packLabel:'2kg blocks' },
+  // Sides
+  { name:'Fries',                    category:'sides',      unit:'kg', pack:2.5, packLabel:'sacks of 2.5kg' },
+  // Drinks
+  { name:'Soda / Refresco',          category:'drinks',     unit:'pieces', pack:12, packLabel:'packs of 12' },
+  { name:'Water / Awa',              category:'drinks',     unit:'pieces', pack:24, packLabel:'packs of 24' },
+  { name:'Energy Drink',             category:'drinks',     unit:'pieces', pack:24, packLabel:'packs of 24' },
+  // Sauces
+  { name:'Garlic Sauce',             category:'sauce',      unit:'bottles' },
+  { name:'Rosada Sauce',             category:'sauce',      unit:'bottles' },
+  { name:'Pinda Sauce',              category:'sauce',      unit:'bottles' },
+  // Condiments
+  { name:'Ketchup',                  category:'condiment',  unit:'cans' },
+  { name:'Mayonnaise',               category:'condiment',  unit:'bottles' },
+  { name:'Oil',                      category:'condiment',  unit:'L' },
+  { name:'Salt',                     category:'condiment',  unit:'kg' },
+  // Veggies
+  { name:'Lettuce',                  category:'veggies',    unit:'kg' },
+  { name:'Tomato',                   category:'veggies',    unit:'kg' },
+  { name:'Onion',                    category:'veggies',    unit:'kg' },
+  { name:'Avocado / Palta',          category:'veggies',    unit:'pieces' },
+  { name:'Corn',                     category:'veggies',    unit:'cans' },
+  { name:'Jalapeño',                 category:'veggies',    unit:'cans' },
+  { name:'Custom / Other',           category:'other',      unit:'' },
+];
+
+const CAT_COLOR = {
+  protein:'#FF4D2E', bread:'#FFAA00', dairy:'#9b59b6', sides:'#27ae60',
+  drinks:'#3498db', sauce:'#e67e22', condiment:'#7f8c8d', veggies:'#2ecc71', other:'#95a5a6',
+};
+
+function renderPurchaseItemDropdown() {
+  const sel = $('pItem');
+  if (!sel || sel.querySelector('option[value="Flank Steak"]')) return;
+  const byCategory = {};
+  PURCHASE_ITEMS.forEach(it => {
+    if (!byCategory[it.category]) byCategory[it.category] = [];
+    byCategory[it.category].push(it);
+  });
+  let html = '<option value="">— choose item —</option>';
+  Object.keys(byCategory).forEach(cat => {
+    html += `<optgroup label="${cat.charAt(0).toUpperCase()+cat.slice(1)}">`;
+    byCategory[cat].forEach(it => { html += `<option value="${esc(it.name)}">${esc(it.name)}</option>`; });
+    html += '</optgroup>';
+  });
+  sel.innerHTML = html;
+}
+
+function onPurchaseItemChange() {
+  const val = $('pItem').value;
+  const item = PURCHASE_ITEMS.find(i => i.name === val);
+  const customWrap = $('pCustomNameWrap');
+  if (val === 'Custom / Other') {
+    customWrap.style.display = '';
+    $('pUnit').value = '';
+  } else {
+    customWrap.style.display = 'none';
+    if (item) $('pUnit').value = item.unit;
+  }
+  updatePurchasePreview();
+}
+
+function updatePurchasePreview() {
+  const val = $('pItem').value;
+  const item = PURCHASE_ITEMS.find(i => i.name === val);
+  const qty = parseFloat($('pQty').value) || 0;
+  const preview = $('pPackPreview');
+  if (!preview) return;
+  if (item && item.pack && qty > 0) {
+    const total = qty * item.pack;
+    preview.style.display = '';
+    preview.innerHTML = `<div style="font-size:13px;color:var(--sea-deep);font-weight:600;background:rgba(10,140,154,.08);padding:10px 12px;border-radius:10px">
+      ${qty} ${item.packLabel} = <strong>${total} ${item.unit}</strong> total &nbsp;·&nbsp; ${qty} is how many packs you bought
+    </div>`;
+  } else {
+    preview.style.display = 'none';
+  }
+}
+
+let PURCHASE_TAB = 'today';
+
+async function switchPurchaseTab(range) {
+  PURCHASE_TAB = range;
+  ['Today','Week','Month'].forEach(t => {
+    const btn = $('tab'+t);
+    if (btn) btn.className = 'btn btn-sm' + (range === t.toLowerCase() ? ' btn-primary' : ' btn-ghost');
+  });
+  await loadPurchases(range);
+}
+
+async function loadPurchases(range) {
+  const el = $('purchaseList');
+  el.innerHTML = '<div class="empty"><p>Loading…</p></div>';
+  try {
+    const data = await api('/purchases?range=' + range);
+    if (!data.purchases.length) {
+      el.innerHTML = '<div class="empty"><h3>No purchases yet</h3><p>Log your first purchase above.</p></div>';
+      return;
+    }
+    const total = parseFloat(data.total);
+    let html = `<div class="card" style="margin-bottom:8px;background:linear-gradient(135deg,var(--sea-deep),var(--sea));color:#fff">
+      <div style="font-size:13px;opacity:.8;margin-bottom:4px">Total spent ${range === 'today' ? 'today' : range === 'week' ? 'this week' : 'this month'}</div>
+      <div style="font-size:32px;font-weight:800">FL ${total.toFixed(2)}</div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">`;
+    Object.entries(data.byCategory).sort((a,b) => b[1]-a[1]).forEach(([cat, amt]) => {
+      const pct = Math.round((amt/total)*100);
+      html += `<span style="background:rgba(255,255,255,.2);padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700">${cat} FL ${Number(amt).toFixed(0)} (${pct}%)</span>`;
+    });
+    html += '</div></div>';
+
+    // Group by date
+    const byDate = {};
+    data.purchases.forEach(p => {
+      const d = p.bought_at.split('T')[0];
+      if (!byDate[d]) byDate[d] = [];
+      byDate[d].push(p);
+    });
+    Object.entries(byDate).forEach(([date, items]) => {
+      const dayTotal = items.reduce((s,i) => s+parseFloat(i.price_fl), 0);
+      const label = date === new Date().toISOString().split('T')[0] ? 'Today' : new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+      html += `<div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="font-weight:800">${label}</div>
+          <div style="font-size:13px;color:var(--dim)">FL ${dayTotal.toFixed(2)}</div>
+        </div>`;
+      items.forEach((p,i) => {
+        const isLast = i === items.length-1;
+        const unitCost = (parseFloat(p.price_fl)/parseFloat(p.qty)).toFixed(2);
+        html += `<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;${isLast?'':'border-bottom:1px solid var(--line)'}">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="width:8px;height:8px;border-radius:50%;background:${CAT_COLOR[p.category]||'#95a5a6'};flex-shrink:0;display:inline-block"></span>
+              <span style="font-weight:600;font-size:14px">${esc(p.item_name)}</span>
+            </div>
+            <div style="font-size:12px;color:var(--dim);margin-top:3px;padding-left:16px">${esc(p.qty)} ${esc(p.unit)} · FL ${unitCost}/${esc(p.unit.replace(/s$/,''))}${p.notes ? ' · ' + esc(p.notes) : ''}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-weight:800;white-space:nowrap">FL ${parseFloat(p.price_fl).toFixed(2)}</span>
+            ${CURRENT_USER?.role==='owner' ? `<button onclick="deletePurchase(${p.id})" style="border:none;background:none;color:var(--dim);cursor:pointer;font-size:16px;padding:2px">✕</button>` : ''}
+          </div>
+        </div>`;
+      });
+      html += '</div>';
+    });
+    el.innerHTML = html;
+  } catch (e) { el.innerHTML = `<div class="empty"><p>${esc(e.message)}</p></div>`; }
+}
+
+async function submitPurchase() {
+  const sel = $('pItem').value;
+  const item = PURCHASE_ITEMS.find(i => i.name === sel);
+  const item_name = sel === 'Custom / Other' ? $('pCustomName').value.trim() : sel;
+  const category = item ? item.category : 'other';
+  const price_fl = parseFloat($('pPrice').value);
+  const qty = parseFloat($('pQty').value);
+  const unit = $('pUnit').value.trim();
+  const notes = $('pNote').value.trim();
+
+  if (!item_name) { toast('Choose or enter an item name.'); return; }
+  if (!price_fl || price_fl <= 0) { toast('Enter the price you paid.'); return; }
+  if (!qty || qty <= 0) { toast('Enter the quantity.'); return; }
+  if (!unit) { toast('Enter the unit (kg, pieces, etc.).'); return; }
+
+  // If it's a pack item, auto-generate note
+  const packNote = (item && item.pack && !notes)
+    ? `${qty} ${item.packLabel} = ${qty*item.pack} ${item.unit}`
+    : notes;
+
+  try {
+    await api('/purchases', { method:'POST', body: JSON.stringify({ item_name, category, price_fl, qty, unit, notes: packNote }) });
+    toast('Purchase saved!');
+    $('pItem').value = '';
+    $('pPrice').value = '';
+    $('pQty').value = '';
+    $('pUnit').value = '';
+    $('pNote').value = '';
+    $('pCustomName').value = '';
+    $('pCustomNameWrap').style.display = 'none';
+    if ($('pPackPreview')) $('pPackPreview').style.display = 'none';
+    await loadPurchases(PURCHASE_TAB);
+  } catch (e) { toast(e.message); }
+}
+
+async function deletePurchase(id) {
+  if (!confirm('Delete this purchase?')) return;
+  try {
+    await api('/purchases/' + id, { method:'DELETE' });
+    toast('Deleted.');
+    await loadPurchases(PURCHASE_TAB);
+  } catch (e) { toast(e.message); }
+}
+
+// ============================================================
+// STOCK / KITCHEN COUNTDOWN
+// ============================================================
+
+// Items in the stock setup form (non-protein)
+const STOCK_OTHER = [
+  { key:'tortilla',  label:'12" Tortilla',       unit:'pieces', icon:'📄' },
+  { key:'burger_bun',label:'Burger Bun',          unit:'pieces', icon:'🍞' },
+  { key:'hotdog',    label:'Hotdog / Salchicha',  unit:'pieces', icon:'🌭', note:'S=4pcs · M=6pcs · L=8pcs' },
+  { key:'fries',     label:'Fries',               unit:'kg',     icon:'🍟' },
+  { key:'cheese',    label:'Mozzarella Cheese',   unit:'kg',     icon:'🧀' },
+];
+
+// Category display order / icons for countdown
+const STOCK_CATEGORY_INFO = {
+  basket:  { label:'🧺 Single Protein Baskets', icon:'🧺' },
+  wrap:    { label:'🌯 Wraps',                  icon:'🌯' },
+  burger:  { label:'🍔 Burger',                 icon:'🍔' },
+  mix:     { label:'🔀 Mix Baskets',             icon:'🔀' },
+  hotdog:  { label:'🌭 Hotdogs',                icon:'🌭' },
+  bread:   { label:'📄 Tortillas / Buns',        icon:'📄' },
+  sides:   { label:'🍟 Sides',                  icon:'🍟' },
+  dairy:   { label:'🧀 Dairy',                  icon:'🧀' },
+  other:   { label:'📦 Other',                  icon:'📦' },
+};
+
+async function loadStock() {
+  const el = $('stockContent');
+  el.innerHTML = '<div class="empty"><p>Loading…</p></div>';
+  try {
+    const data = await api('/stock/tonight');
+    if (!data.session) {
+      renderStockSetup(el);
+    } else if (data.session.status === 'closed') {
+      renderShiftSummary(el, data.items);
+    } else {
+      renderLiveCountdown(el, data.session, data.items);
+    }
+  } catch (e) { el.innerHTML = `<div class="empty"><p>${esc(e.message)}</p></div>`; }
+}
+
+// ---- SETUP FORM ----
+
+let stockProteinRows = [];
+
+function renderStockSetup(el) {
+  stockProteinRows = [{ protein:'', kg:'' }];
+  el.innerHTML = `
+    <div class="card">
+      <div style="font-weight:800;font-size:16px;margin-bottom:4px">Tonight's Stock</div>
+      <div style="font-size:13px;color:var(--dim);margin-bottom:16px">What's prepped and ready for service?</div>
+
+      <div style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Proteins seasoned</div>
+      <div id="stockProteinList"></div>
+      <button class="btn btn-ghost btn-sm" onclick="addStockProteinRow()" style="margin-bottom:16px">+ Add protein</button>
+      <button class="btn btn-ghost btn-sm" onclick="fillStockFromPrep()" style="margin-left:8px;margin-bottom:16px">↓ Fill from today's prep</button>
+
+      <div id="stockProteinPreview" style="margin-bottom:16px"></div>
+
+      <div style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Other items</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px">
+        ${STOCK_OTHER.map(s => `
+          <div class="field">
+            <label>${s.icon} ${esc(s.label)}${s.note ? '<span style="font-weight:400;font-size:11px"> ('+s.note+')</span>' : ''}</label>
+            <input type="number" id="so_${s.key}" min="0" step="${s.unit==='kg'?'0.5':'1'}" placeholder="0" oninput="updateStockHotdogPreview()">
+          </div>`).join('')}
+      </div>
+      <div id="hotdogPreview" style="margin-bottom:12px"></div>
+
+    </div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:4px;height:52px;font-size:16px" onclick="submitOpenShift()">Open Service Tonight</button>`;
+  renderStockProteinList();
+}
+
+function renderStockProteinList() {
+  $('stockProteinList').innerHTML = stockProteinRows.map((r, i) => `
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:10px">
+      <select id="spName_${i}" onchange="updateStockPortionPreview()">
+        <option value="">— protein —</option>
+        ${['Flank Steak','Chicken Breast','Chicken Wings','Burger Meat / Carni Mula','Chicharron / Pork Belly','Bacon']
+          .map(p => `<option value="${p}"${r.protein===p?' selected':''}>${p}</option>`).join('')}
+      </select>
+      <input type="number" id="spKg_${i}" step="0.5" min="0" placeholder="kg" value="${r.kg}" oninput="updateStockPortionPreview()">
+      ${stockProteinRows.length > 1 ? `<button class="btn btn-ghost btn-sm" onclick="removeStockProteinRow(${i})">✕</button>` : '<div></div>'}
+    </div>`).join('');
+}
+
+function addStockProteinRow() {
+  stockProteinRows.push({ protein:'', kg:'' });
+  renderStockProteinList();
+}
+
+function removeStockProteinRow(i) {
+  stockProteinRows.splice(i, 1);
+  renderStockProteinList();
+  updateStockPortionPreview();
+}
+
+function updateStockPortionPreview() {
+  // Read current rows from DOM
+  stockProteinRows.forEach((r, i) => {
+    const nameEl = $('spName_'+i), kgEl = $('spKg_'+i);
+    if (nameEl) r.protein = nameEl.value;
+    if (kgEl) r.kg = parseFloat(kgEl.value) || 0;
+  });
+
+  // Sum portions across all proteins
+  const totals = {};
+  AUTO_SPLIT.forEach(s => { totals[s.label] = { g: s.g, group: s.group, pct: s.pct, count: 0 }; });
+
+  stockProteinRows.forEach(r => {
+    if (!r.protein || !r.kg) return;
+    const grams = r.kg * 1000;
+    AUTO_SPLIT.forEach(s => {
+      totals[s.label].count += Math.floor(grams * s.pct / s.g);
+    });
+  });
+
+  const totalKg = stockProteinRows.reduce((s, r) => s + (parseFloat(r.kg)||0), 0);
+  if (totalKg <= 0) { $('stockProteinPreview').innerHTML = ''; return; }
+
+  const groups = {};
+  Object.entries(totals).forEach(([label, info]) => {
+    if (!groups[info.group]) groups[info.group] = [];
+    groups[info.group].push({ label, count: info.count });
+  });
+
+  let html = `<div style="background:rgba(10,140,154,.07);border-radius:12px;padding:14px;border:1px solid rgba(10,140,154,.2)">
+    <div style="font-size:12px;font-weight:700;color:var(--sea-deep);margin-bottom:10px">Estimated portions from ${totalKg.toFixed(1)} kg</div>`;
+  Object.entries(groups).forEach(([grp, items]) => {
+    const info = STOCK_CATEGORY_INFO[grp] || {};
+    html += `<div style="margin-bottom:8px"><div style="font-size:11px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">${info.label||grp}</div>`;
+    html += `<div style="display:flex;flex-wrap:wrap;gap:6px">`;
+    items.forEach(it => {
+      html += `<span style="background:#fff;border:1px solid var(--line);padding:4px 10px;border-radius:999px;font-size:13px;font-weight:700">${esc(it.label.split('(')[0].trim())}: ${it.count}</span>`;
+    });
+    html += '</div></div>';
+  });
+  html += '</div>';
+  $('stockProteinPreview').innerHTML = html;
+}
+
+function updateStockHotdogPreview() {
+  const pcs = parseFloat($('so_hotdog')?.value) || 0;
+  const preview = $('hotdogPreview');
+  if (!preview || !pcs) { if (preview) preview.innerHTML = ''; return; }
+  preview.innerHTML = `<div style="font-size:12px;color:var(--dim);padding:8px 12px;background:rgba(255,170,0,.1);border-radius:8px">
+    ${pcs} hotdog pieces → S: ${Math.floor(pcs/4)} · M: ${Math.floor(pcs/6)} · L: ${Math.floor(pcs/8)} portions
+  </div>`;
+}
+
+async function fillStockFromPrep() {
+  try {
+    const inv = await api('/inventory');
+    const proteins = inv.proteins.filter(p => p.latest_kg_done > 0);
+    if (!proteins.length) { toast('No proteins logged in today\'s prep.'); return; }
+    stockProteinRows = proteins.map(p => ({ protein: p.protein_name, kg: parseFloat(p.latest_kg_done) }));
+    renderStockProteinList();
+    updateStockPortionPreview();
+    toast('Filled from today\'s prep!');
+  } catch (e) { toast(e.message); }
+}
+
+async function submitOpenShift() {
+  // Collect protein portions
+  updateStockPortionPreview();
+  const totals = {};
+  AUTO_SPLIT.forEach(s => { totals[s.label] = { g: s.g, group: s.group, pct: s.pct, count: 0 }; });
+  stockProteinRows.forEach(r => {
+    if (!r.protein || !r.kg) return;
+    const grams = (parseFloat(r.kg)||0) * 1000;
+    AUTO_SPLIT.forEach(s => { totals[s.label].count += Math.floor(grams * s.pct / s.g); });
+  });
+
+  const items = [];
+  // Add protein portion items
+  Object.entries(totals).forEach(([label, info]) => {
+    if (info.count > 0) {
+      items.push({ item_name: label.split('(')[0].trim(), category: info.group, unit: 'portions', start_qty: info.count });
+    }
+  });
+
+  // Add other items
+  STOCK_OTHER.forEach(s => {
+    const val = parseFloat($('so_'+s.key)?.value) || 0;
+    if (val > 0) {
+      if (s.key === 'hotdog') {
+        // Store hotdog as sub-items for each size
+        [['Hotdog S',4],['Hotdog M',6],['Hotdog L',8]].forEach(([name, pcs]) => {
+          items.push({ item_name: name, category: 'hotdog', unit: 'portions', start_qty: Math.floor(val/pcs) });
+        });
+      } else {
+        const cat = s.key === 'tortilla' || s.key === 'burger_bun' ? 'bread' : s.key === 'fries' ? 'sides' : 'dairy';
+        items.push({ item_name: s.label, category: cat, unit: s.unit, start_qty: val });
+      }
+    }
+  });
+
+  if (!items.length) { toast('Enter at least one item.'); return; }
+
+  try {
+    await api('/stock/open', { method:'POST', body: JSON.stringify({ items }) });
+    toast('Service started!');
+    loadStock();
+  } catch (e) { toast(e.message); }
+}
+
+// ---- LIVE COUNTDOWN ----
+
+let stockRefreshTimer = null;
+
+function renderLiveCountdown(el, session, items) {
+  clearTimeout(stockRefreshTimer);
+
+  // Group by category
+  const groups = {};
+  items.forEach(item => {
+    if (!groups[item.category]) groups[item.category] = [];
+    groups[item.category].push(item);
+  });
+
+  const catOrder = ['basket','wrap','burger','mix','hotdog','bread','sides','dairy','other'];
+
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div style="font-weight:800;font-size:16px;color:var(--green)">🟢 Service Live</div>
+    <button class="btn btn-ghost btn-sm" onclick="loadStock()">↻ Refresh</button>
+  </div>`;
+
+  catOrder.forEach(cat => {
+    if (!groups[cat]) return;
+    const info = STOCK_CATEGORY_INFO[cat] || { label: cat };
+    html += `<div class="card" style="margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">${info.label}</div>`;
+    groups[cat].forEach((item, idx) => {
+      const cur = parseFloat(item.current_qty);
+      const start = parseFloat(item.start_qty);
+      const pct = start > 0 ? cur / start : 1;
+      const color = pct < 0.15 ? 'var(--coral)' : pct < 0.3 ? '#FFAA00' : 'var(--green)';
+      const isLast = idx === groups[cat].length - 1;
+      html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:11px 0;${isLast?'':'border-bottom:1px solid var(--line)'}">
+        <div>
+          <div style="font-weight:600;font-size:14px">${esc(item.item_name)}</div>
+          <div style="font-size:11px;color:var(--dim)">${item.unit} · started: ${start}${item.unit==='kg'?' kg':''}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="font-weight:800;font-size:26px;color:${color};min-width:56px;text-align:right">${cur % 1 === 0 ? cur : cur.toFixed(1)}</div>
+          <button onclick="stockUse(${item.id}, 1)" style="width:44px;height:44px;border-radius:12px;border:2px solid ${color};background:#fff;font-size:22px;font-weight:800;cursor:pointer;color:${color}">−</button>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  });
+
+  if (CURRENT_USER?.role === 'owner' || CURRENT_USER?.role === 'prep') {
+    html += `<button class="btn btn-coral" style="width:100%;justify-content:center;margin-top:4px;height:52px;font-size:16px" onclick="renderEndOfNightForm()">Close Shift & Log Leftovers</button>`;
+  }
+
+  $('stockContent').innerHTML = html;
+
+  // Auto-refresh every 30s for kitchen device
+  stockRefreshTimer = setTimeout(loadStock, 30000);
+}
+
+async function stockUse(id, amount) {
+  try {
+    const data = await api('/stock/use/' + id, { method:'PATCH', body: JSON.stringify({ amount }) });
+    // Update just the count in-place without full reload
+    const item = data.item;
+    const cur = parseFloat(item.current_qty);
+    const start = parseFloat(item.start_qty);
+    const pct = start > 0 ? cur / start : 1;
+    const color = pct < 0.15 ? 'var(--coral)' : pct < 0.3 ? '#FFAA00' : 'var(--green)';
+    // Find and update the count element (the large number div)
+    const btn = document.querySelector(`button[onclick="stockUse(${id}, 1)"]`);
+    if (btn) {
+      const countEl = btn.previousElementSibling;
+      if (countEl) { countEl.textContent = cur % 1 === 0 ? cur : cur.toFixed(1); countEl.style.color = color; }
+      btn.style.borderColor = color; btn.style.color = color;
+    }
+  } catch (e) { toast(e.message); }
+}
+
+// ---- END OF NIGHT ----
+
+let EON_ITEMS = [];
+
+async function renderEndOfNightForm() {
+  const el = $('stockContent');
+  try {
+    const data = await api('/stock/tonight');
+    EON_ITEMS = data.items;
+    let html = `<div class="card">
+      <div style="font-weight:800;font-size:16px;margin-bottom:4px">End of Night</div>
+      <div style="font-size:13px;color:var(--dim);margin-bottom:16px">Count what's actually left and we'll tell you what to prep tomorrow.</div>
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:6px;margin-bottom:6px">
+        <div style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase">Item</div>
+        <div style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;text-align:center">Started</div>
+        <div style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;text-align:center">Left</div>
+      </div>`;
+    EON_ITEMS.forEach(item => {
+      html += `<div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:6px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">
+        <div style="font-size:13px;font-weight:600">${esc(item.item_name)}</div>
+        <div style="text-align:center;color:var(--dim)">${item.start_qty}</div>
+        <input type="number" id="eon_${item.id}" min="0" step="${item.unit==='kg'?'0.5':'1'}"
+               style="border:1.5px solid var(--line);border-radius:8px;padding:8px;text-align:center;font-size:14px;font-weight:700;width:100%"
+               placeholder="0">
+      </div>`;
+    });
+    html += '</div>';
+    html += `<button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px;height:52px;font-size:16px" onclick="submitCloseShift()">Save & See Tomorrow's Plan</button>`;
+    el.innerHTML = html;
+  } catch (e) { toast(e.message); }
+}
+
+async function submitCloseShift() {
+  const items = EON_ITEMS.map(item => ({
+    id: item.id,
+    end_qty: parseFloat($('eon_'+item.id)?.value) || 0,
+  }));
+  try {
+    const data = await api('/stock/close', { method:'POST', body: JSON.stringify({ items }) });
+    renderShiftSummary($('stockContent'), data.items);
+  } catch (e) { toast(e.message); }
+}
+
+function renderShiftSummary(el, items) {
+  const sold = items.map(item => ({
+    ...item,
+    soldQty: parseFloat(item.start_qty) - (item.end_qty != null ? parseFloat(item.end_qty) : parseFloat(item.current_qty)),
+  })).filter(i => parseFloat(i.start_qty) > 0);
+
+  // Sort by sold qty desc (what was most popular)
+  sold.sort((a, b) => b.soldQty - a.soldQty);
+
+  // Basket-type items for recommendation
+  const portionSold = sold.filter(i => ['basket','wrap','burger','mix'].includes(i.category));
+
+  let html = `<div class="card" style="border-left:4px solid var(--green)">
+    <div style="font-weight:800;font-size:16px;margin-bottom:2px">Tonight's Summary</div>
+    <div style="font-size:13px;color:var(--dim);margin-bottom:14px">What went out tonight</div>`;
+
+  const groups = {};
+  sold.forEach(i => {
+    if (!groups[i.category]) groups[i.category] = [];
+    groups[i.category].push(i);
+  });
+  const catOrder = ['basket','wrap','burger','mix','hotdog','bread','sides','dairy','other'];
+  catOrder.forEach(cat => {
+    if (!groups[cat]) return;
+    const info = STOCK_CATEGORY_INFO[cat] || { label: cat };
+    html += `<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">${info.label}</div>`;
+    groups[cat].forEach(item => {
+      const pct = parseFloat(item.start_qty) > 0 ? item.soldQty / parseFloat(item.start_qty) : 0;
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:13px">${esc(item.item_name)}</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:80px;height:6px;background:var(--line);border-radius:99px">
+            <div style="width:${Math.min(100,Math.round(pct*100))}%;height:6px;background:var(--sea);border-radius:99px"></div>
+          </div>
+          <span style="font-weight:700;font-size:13px;min-width:30px;text-align:right">${item.soldQty % 1 === 0 ? item.soldQty : item.soldQty.toFixed(1)}</span>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // Tomorrow's recommendation
+  if (portionSold.length > 0) {
+    const top = portionSold.slice(0, 3);
+    const slow = portionSold.slice(-2).filter(i => i.soldQty < (portionSold[0].soldQty * 0.2));
+    html += `<div class="card" style="margin-top:10px;border-left:4px solid var(--mango)">
+      <div style="font-weight:800;font-size:15px;margin-bottom:10px;color:var(--sea-deep)">🎯 Tomorrow's Prep Focus</div>`;
+    top.forEach(i => {
+      html += `<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">
+        <span style="color:var(--green);font-size:16px">↑</span>
+        <div><span style="font-weight:700">${esc(i.item_name)}</span> sold <strong>${i.soldQty % 1 === 0 ? i.soldQty : i.soldQty.toFixed(1)}</strong> tonight — keep prep level or increase</div>
+      </div>`;
+    });
+    slow.forEach(i => {
+      html += `<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">
+        <span style="color:var(--coral);font-size:16px">↓</span>
+        <div><span style="font-weight:700">${esc(i.item_name)}</span> moved slow (${i.soldQty % 1 === 0 ? i.soldQty : i.soldQty.toFixed(1)} sold) — reduce prep or shift mix toward faster sellers</div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  html += `<button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:8px" onclick="loadStock()">↻ Check tomorrow's shift</button>`;
+  el.innerHTML = html;
 }
