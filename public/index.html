@@ -289,29 +289,61 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
   </nav>
   <div class="wrap" style="margin-top:20px">
     <div class="card">
-      <div style="font-weight:800;font-size:17px;margin-bottom:4px">How many portions?</div>
-      <div style="color:var(--dim);font-size:13px;margin-bottom:20px">Steak · Chicken Breast — enter total kg to prep</div>
+      <div style="font-weight:800;font-size:17px;margin-bottom:4px">How much are you seasoning?</div>
+      <div style="color:var(--dim);font-size:13px;margin-bottom:20px">Steak · Chicken — enter kg and get your full portion plan</div>
       <div class="field">
         <label>Weight (kg)</label>
-        <input type="number" id="portionKg" step="0.1" min="0" placeholder="e.g. 50"
+        <input type="number" id="portionKg" step="0.1" min="0" placeholder="e.g. 40"
                style="font-size:28px;font-weight:800;text-align:center;letter-spacing:-1px"
                oninput="calcPortions()">
       </div>
     </div>
-    <div class="card" id="portionResults" style="display:none">
-      <div style="font-weight:800;font-size:15px;margin-bottom:4px;color:var(--sea-deep)">Max portions from this weight</div>
-      <div style="font-size:12px;color:var(--dim);margin-bottom:16px">Raw weight — actual yield ~15–20% fewer after cooking</div>
-      <div id="portionRows"></div>
+
+    <div id="portionResults" style="display:none">
+      <!-- BASKETS -->
+      <div class="card" style="margin-top:16px">
+        <div style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">🧺 Single Protein Baskets</div>
+        <div id="rowsBasket"></div>
+      </div>
+      <!-- WRAPS -->
+      <div class="card" style="margin-top:12px">
+        <div style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">🌯 Wraps — Burrito · Quesadilla · Sandwich</div>
+        <div id="rowsWrap"></div>
+      </div>
+      <!-- BURGER -->
+      <div class="card" style="margin-top:12px">
+        <div style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">🍔 Burger</div>
+        <div id="rowsBurger"></div>
+      </div>
+      <!-- MIX BASKETS -->
+      <div class="card" style="margin-top:12px">
+        <div style="font-size:11px;font-weight:700;color:var(--sea-deep);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">🔀 Mix Baskets — protein contribution per order</div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:12px">Each number = how many mix orders this protein covers as ONE of the proteins</div>
+        <div id="rowsMix"></div>
+      </div>
+      <!-- TOTAL -->
+      <div style="padding:14px 0;text-align:center">
+        <div style="font-size:12px;color:var(--dim)">Raw weight — actual yield ~15–20% fewer after cooking loss</div>
+      </div>
     </div>
+
+    <!-- PLAN YOUR NIGHT (manual override) -->
     <div class="card" style="margin-top:16px">
       <div style="font-weight:800;font-size:15px;margin-bottom:4px;color:var(--sea-deep)">Plan your night</div>
-      <div style="font-size:12px;color:var(--dim);margin-bottom:16px">Enter how many of each you need → see kg required</div>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:14px">Type your targets → see exact kg needed</div>
+      <div style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Single portions</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
         <div class="field"><label>Basket S (6 oz)</label><input type="number" id="pPlanS" min="0" placeholder="0" oninput="calcPlan()"></div>
         <div class="field"><label>Basket M (10 oz)</label><input type="number" id="pPlanM" min="0" placeholder="0" oninput="calcPlan()"></div>
         <div class="field"><label>Basket L (12 oz)</label><input type="number" id="pPlanL" min="0" placeholder="0" oninput="calcPlan()"></div>
-        <div class="field"><label>Wrap / Burrito / Quesadilla (8 oz)</label><input type="number" id="pPlanW" min="0" placeholder="0" oninput="calcPlan()"></div>
+        <div class="field"><label>Wrap/Burrito/Quesadilla (8 oz)</label><input type="number" id="pPlanW" min="0" placeholder="0" oninput="calcPlan()"></div>
         <div class="field"><label>Burger (6 oz)</label><input type="number" id="pPlanB" min="0" placeholder="0" oninput="calcPlan()"></div>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Mix baskets (per protein contribution)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div class="field"><label>Mix S (2 oz each)</label><input type="number" id="pPlanMixS" min="0" placeholder="0" oninput="calcPlan()"></div>
+        <div class="field"><label>Mix M (3 oz each)</label><input type="number" id="pPlanMixM" min="0" placeholder="0" oninput="calcPlan()"></div>
+        <div class="field"><label>Mix L (4 oz each)</label><input type="number" id="pPlanMixL" min="0" placeholder="0" oninput="calcPlan()"></div>
       </div>
       <div id="planResult" style="display:none;padding:16px;background:rgba(10,140,154,.07);border-radius:12px;border:1.5px solid rgba(10,140,154,.25);text-align:center">
         <div style="font-size:13px;color:var(--dim);margin-bottom:4px">Total protein needed</div>

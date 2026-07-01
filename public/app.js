@@ -490,52 +490,81 @@ async function registerPush() {
 }
 
 // ---------- PORTION CALCULATOR ----------
-const PORTION_SIZES = [
-  { label: 'Basket Small',  sub: '6 oz each',  g: 170 },
-  { label: 'Basket Medium', sub: '10 oz each', g: 283 },
-  { label: 'Basket Large',  sub: '12 oz each', g: 340 },
-  { label: 'Wrap / Burrito / Quesadilla / Sandwich', sub: '8 oz each', g: 227 },
-  { label: 'Burger',        sub: '6 oz each',  g: 170 },
+
+// Suggested split percentages across all menu items (by protein weight)
+const AUTO_SPLIT = [
+  // Single portions
+  { group:'basket', label:'Basket Small',   sub:'6 oz each',  g:170, pct:0.08 },
+  { group:'basket', label:'Basket Medium',  sub:'10 oz each', g:283, pct:0.22 },
+  { group:'basket', label:'Basket Large',   sub:'12 oz each', g:340, pct:0.13 },
+  // Wraps
+  { group:'wrap',   label:'Burrito',        sub:'8 oz each',  g:227, pct:0.10 },
+  { group:'wrap',   label:'Quesadilla',     sub:'8 oz each',  g:227, pct:0.06 },
+  { group:'wrap',   label:'Sandwich',       sub:'8 oz each',  g:227, pct:0.04 },
+  // Burger
+  { group:'burger', label:'Burger',         sub:'6 oz each',  g:170, pct:0.05 },
+  // Mix baskets — protein contribution per order
+  { group:'mix', label:'Mix Small  (2-protein S = 3oz ea · 3-protein S = 2oz ea)', sub:'avg 2 oz per order', g:57,  pct:0.05 },
+  { group:'mix', label:'Mix Medium (2-protein M = 5oz ea · 3-protein M = 3oz ea · 4-protein M = 2.5oz ea)', sub:'avg 3 oz per order', g:85,  pct:0.18 },
+  { group:'mix', label:'Mix Large  (2-protein L = 6oz ea · 3-protein L = 4oz ea · 4-protein L = 3oz ea)',  sub:'avg 4 oz per order', g:113, pct:0.09 },
 ];
+
+function portionRow(label, sub, count, isLast) {
+  return `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;${isLast?'':'border-bottom:1px solid var(--line)'}">
+    <div><div style="font-weight:600;font-size:14px">${label}</div><div style="font-size:12px;color:var(--dim)">${sub}</div></div>
+    <div style="font-weight:800;font-size:24px;color:var(--sea-deep);min-width:50px;text-align:right">${count}</div>
+  </div>`;
+}
 
 function calcPortions() {
   const kg = parseFloat($('portionKg').value) || 0;
   if (kg <= 0) { $('portionResults').style.display = 'none'; return; }
   const grams = kg * 1000;
-  let html = '';
-  PORTION_SIZES.forEach((p, i) => {
-    const count = Math.floor(grams / p.g);
-    const isLast = i === PORTION_SIZES.length - 1;
-    html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:13px 0;${isLast ? '' : 'border-bottom:1px solid var(--line)'}">
-      <div>
-        <div style="font-weight:600">${p.label}</div>
-        <div style="font-size:12px;color:var(--dim)">${p.sub}</div>
-      </div>
-      <div style="font-weight:800;font-size:22px;color:var(--sea-deep)">${count}</div>
-    </div>`;
-  });
-  $('portionRows').innerHTML = html;
+
+  const basket = AUTO_SPLIT.filter(r => r.group === 'basket');
+  const wrap   = AUTO_SPLIT.filter(r => r.group === 'wrap');
+  const burger = AUTO_SPLIT.filter(r => r.group === 'burger');
+  const mix    = AUTO_SPLIT.filter(r => r.group === 'mix');
+
+  function renderGroup(items) {
+    return items.map((r, i) => {
+      const count = Math.floor(grams * r.pct / r.g);
+      const kgUsed = (grams * r.pct / 1000).toFixed(1);
+      return portionRow(r.label, r.sub + ' · ' + kgUsed + ' kg', count, i === items.length - 1);
+    }).join('');
+  }
+
+  $('rowsBasket').innerHTML = renderGroup(basket);
+  $('rowsWrap').innerHTML   = renderGroup(wrap);
+  $('rowsBurger').innerHTML = renderGroup(burger);
+  $('rowsMix').innerHTML    = renderGroup(mix);
   $('portionResults').style.display = 'block';
 }
 
 function calcPlan() {
-  const s = parseInt($('pPlanS').value) || 0;
-  const m = parseInt($('pPlanM').value) || 0;
-  const l = parseInt($('pPlanL').value) || 0;
-  const w = parseInt($('pPlanW').value) || 0;
-  const b = parseInt($('pPlanB').value) || 0;
-  const total = s + m + l + w + b;
+  const s    = parseInt($('pPlanS').value)    || 0;
+  const m    = parseInt($('pPlanM').value)    || 0;
+  const l    = parseInt($('pPlanL').value)    || 0;
+  const w    = parseInt($('pPlanW').value)    || 0;
+  const b    = parseInt($('pPlanB').value)    || 0;
+  const mxS  = parseInt($('pPlanMixS').value) || 0;
+  const mxM  = parseInt($('pPlanMixM').value) || 0;
+  const mxL  = parseInt($('pPlanMixL').value) || 0;
+  const total = s + m + l + w + b + mxS + mxM + mxL;
   if (total === 0) { $('planResult').style.display = 'none'; return; }
-  const totalG = (s * 170) + (m * 283) + (l * 340) + (w * 227) + (b * 170);
+  const totalG = (s*170) + (m*283) + (l*340) + (w*227) + (b*170) + (mxS*57) + (mxM*85) + (mxL*113);
   const totalKg = (totalG / 1000).toFixed(2);
   $('planKg').textContent = totalKg + ' kg';
   const parts = [];
-  if (s) parts.push(s + ' S');
-  if (m) parts.push(m + ' M');
-  if (l) parts.push(l + ' L');
-  if (w) parts.push(w + ' wrap');
-  if (b) parts.push(b + ' burger');
-  $('planPortions').textContent = parts.join(' · ') + ' = ' + total + ' total portions';
+  if (s)   parts.push(s   + ' Basket S');
+  if (m)   parts.push(m   + ' Basket M');
+  if (l)   parts.push(l   + ' Basket L');
+  if (w)   parts.push(w   + ' Wrap');
+  if (b)   parts.push(b   + ' Burger');
+  if (mxS) parts.push(mxS + ' Mix S');
+  if (mxM) parts.push(mxM + ' Mix M');
+  if (mxL) parts.push(mxL + ' Mix L');
+  $('planPortions').textContent = parts.join(' · ') + ' = ' + total + ' total';
   $('planResult').style.display = 'block';
 }
 
