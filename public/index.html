@@ -136,7 +136,6 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
     <div class="nav-right">
       <span id="navUserName" style="font-size:13px;font-weight:600;color:var(--dim)"></span>
       <button class="btn btn-ghost btn-sm" onclick="go('seasoning')">🧂</button>
-      <button class="btn btn-ghost btn-sm" onclick="go('portions')">🍽️</button>
       <button class="btn btn-ghost btn-sm" onclick="go('purchases')">🛒</button>
       <button class="btn btn-ghost btn-sm" onclick="go('stock')">📦</button>
       <button class="btn btn-ghost btn-sm" onclick="go('settings')" data-i18n="settings">⚙️</button>
@@ -171,7 +170,6 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
     <div class="sec-head" style="margin-top:20px">
       <div><h2 data-i18n="toProcess">To Process</h2><p data-i18n="toProcessSub">Log your progress below</p></div>
       <button class="btn btn-ghost btn-sm" onclick="go('seasoning')">🧂</button>
-      <button class="btn btn-ghost btn-sm" onclick="go('portions')">🍽️</button>
       <button class="btn btn-ghost btn-sm" onclick="go('prep-history')" data-i18n="history">History →</button>
     </div>
     <div id="prepInventory"></div>
@@ -234,7 +232,7 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
   </div>
 </div>
 
-<!-- SEASONING CALCULATOR -->
+<!-- SEASONING + PORTIONS (combined) -->
 <div class="page" id="seasoning">
   <nav class="nav">
     <div class="nav-logo"><button class="btn btn-ghost btn-sm" id="seasoningBack">← Back</button></div>
@@ -251,8 +249,10 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
                oninput="calcSeasoning()">
       </div>
     </div>
+
+    <!-- Seasoning amounts -->
     <div class="card" id="seasonResults" style="display:none">
-      <div style="font-weight:800;font-size:15px;margin-bottom:16px;color:var(--sea-deep)">Amounts to use</div>
+      <div style="font-weight:800;font-size:15px;margin-bottom:16px;color:var(--sea-deep)">Seasoning amounts</div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid var(--line)">
         <span style="font-weight:600">Compleet seasoning</span>
         <span style="font-weight:800;font-size:17px" id="sCompleet">—</span>
@@ -279,6 +279,34 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
           <span style="font-weight:600">Maggi seasoning</span>
           <span style="font-weight:800;font-size:17px;color:var(--sea-deep)" id="sMaggi">—</span>
         </div>
+      </div>
+    </div>
+
+    <!-- Portion bag cuts (same kg, no extra tab) -->
+    <div class="card" id="portionCuts" style="display:none;margin-top:12px">
+      <div style="font-weight:800;font-size:15px;margin-bottom:4px;color:var(--sea-deep)">Bag cuts</div>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:14px">How many bags to cut from this batch</div>
+      <div id="portionCutRows"></div>
+      <div style="margin-top:14px;padding:12px;background:rgba(255,170,0,.1);border-radius:10px;border:1px solid rgba(255,170,0,.3)">
+        <div style="font-size:12px;font-weight:700;color:#a06800;margin-bottom:4px">🔀 Mix baskets — scoop at service time</div>
+        <div style="font-size:12px;color:var(--dim)" id="mixNote">Use from 6oz stock · Small mix: 2oz · Medium mix: 3oz · Large mix: 4oz per protein</div>
+      </div>
+    </div>
+
+    <!-- Plan your night (manual targets → kg needed) -->
+    <div class="card" id="planNightCard" style="display:none;margin-top:12px">
+      <div style="font-weight:800;font-size:15px;margin-bottom:4px;color:var(--sea-deep)">Plan your night</div>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:14px">Enter targets → see exact kg needed</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px">
+        <div class="field"><label>6oz bags (S + Burger + Mix)</label><input type="number" id="pPlan6" min="0" placeholder="0" oninput="calcPlanNight()"></div>
+        <div class="field"><label>8oz bags (Wraps)</label><input type="number" id="pPlan8" min="0" placeholder="0" oninput="calcPlanNight()"></div>
+        <div class="field"><label>10oz bags (Basket M)</label><input type="number" id="pPlan10" min="0" placeholder="0" oninput="calcPlanNight()"></div>
+        <div class="field"><label>12oz bags (Basket L)</label><input type="number" id="pPlan12" min="0" placeholder="0" oninput="calcPlanNight()"></div>
+      </div>
+      <div id="planNightResult" style="display:none;padding:14px;background:rgba(10,140,154,.07);border-radius:12px;border:1.5px solid rgba(10,140,154,.25);text-align:center">
+        <div style="font-size:13px;color:var(--dim);margin-bottom:4px">Total protein needed</div>
+        <div id="planNightKg" style="font-size:32px;font-weight:800;color:var(--sea-deep)">—</div>
+        <div id="planNightBreak" style="font-size:12px;color:var(--dim);margin-top:4px"></div>
       </div>
     </div>
   </div>

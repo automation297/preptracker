@@ -56,6 +56,10 @@ function go(id){
   if (id === 'seasoning') {
     $('seasonKg').value = '';
     $('seasonResults').style.display = 'none';
+    if ($('portionCuts'))   $('portionCuts').style.display   = 'none';
+    if ($('planNightCard')) $('planNightCard').style.display = 'none';
+    if ($('planNightResult')) $('planNightResult').style.display = 'none';
+    ['pPlan6','pPlan8','pPlan10','pPlan12'].forEach(id => { const el = $(id); if(el) el.value=''; });
     const back = $('seasoningBack');
     if (back) back.onclick = () => go(CURRENT_USER?.role === 'owner' ? 'owner-home' : 'prep-home');
   }
@@ -581,10 +585,27 @@ function calcPlan() {
   $('planResult').style.display = 'block';
 }
 
-// ---------- SEASONING CALCULATOR ----------
+// ---------- SEASONING + PORTIONS CALCULATOR (combined) ----------
+
+// Bag cut groups — the only sizes prep needs to cut
+// pct = share of the kg going into this bag size
+const BAG_CUTS = [
+  { oz:  6, g: 170, pct: 0.45, label: 'Basket Small · Burger · Mix stock',       color: 'var(--sea-deep)' },
+  { oz:  8, g: 227, pct: 0.20, label: 'Wraps (Burrito · Quesadilla · Sandwich)', color: '#e67e22' },
+  { oz: 10, g: 283, pct: 0.22, label: 'Basket Medium',                            color: '#FFAA00' },
+  { oz: 12, g: 340, pct: 0.13, label: 'Basket Large',                             color: 'var(--coral)' },
+];
+
 function calcSeasoning() {
   const kg = parseFloat($('seasonKg').value) || 0;
-  if (kg <= 0) { $('seasonResults').style.display = 'none'; return; }
+  if (kg <= 0) {
+    $('seasonResults').style.display = 'none';
+    if ($('portionCuts'))   $('portionCuts').style.display   = 'none';
+    if ($('planNightCard')) $('planNightCard').style.display = 'none';
+    return;
+  }
+
+  // Seasoning amounts
   const compleet = kg * 0.25;
   const badia    = kg * 0.25;
   const chicken  = kg * 0.25;
@@ -598,6 +619,43 @@ function calcSeasoning() {
   $('sMaggi').textContent    = maggi.toFixed(2)    + ' oz';
   $('sOil').textContent      = oil.toFixed(2)      + ' oz';
   $('seasonResults').style.display = 'block';
+
+  // Bag cut breakdown
+  const grams = kg * 1000;
+  const rows = BAG_CUTS.map((cut, i) => {
+    const count = Math.floor(grams * cut.pct / cut.g);
+    const kgUsed = (grams * cut.pct / 1000).toFixed(1);
+    const isLast = i === BAG_CUTS.length - 1;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:13px 0;${isLast?'':'border-bottom:1px solid var(--line)'}">
+      <div>
+        <div style="font-weight:700;font-size:15px">${cut.oz}oz bags</div>
+        <div style="font-size:12px;color:var(--dim);margin-top:2px">${cut.label} · ${kgUsed} kg</div>
+      </div>
+      <div style="font-weight:800;font-size:28px;color:${cut.color};min-width:60px;text-align:right">${count}</div>
+    </div>`;
+  });
+  $('portionCutRows').innerHTML = rows.join('');
+  $('portionCuts').style.display = 'block';
+  $('planNightCard').style.display = 'block';
+}
+
+function calcPlanNight() {
+  const b6  = parseInt($('pPlan6').value)  || 0;
+  const b8  = parseInt($('pPlan8').value)  || 0;
+  const b10 = parseInt($('pPlan10').value) || 0;
+  const b12 = parseInt($('pPlan12').value) || 0;
+  const total = b6 + b8 + b10 + b12;
+  if (!total) { $('planNightResult').style.display = 'none'; return; }
+  const grams = (b6*170) + (b8*227) + (b10*283) + (b12*340);
+  const kg = (grams/1000).toFixed(2);
+  $('planNightKg').textContent = kg + ' kg';
+  const parts = [];
+  if (b6)  parts.push(b6  + ' × 6oz');
+  if (b8)  parts.push(b8  + ' × 8oz');
+  if (b10) parts.push(b10 + ' × 10oz');
+  if (b12) parts.push(b12 + ' × 12oz');
+  $('planNightBreak').textContent = parts.join(' · ');
+  $('planNightResult').style.display = 'block';
 }
 
 function urlBase64ToUint8Array(base64String) {
@@ -922,37 +980,19 @@ function updateStockPortionPreview() {
     if (kgEl) r.kg = parseFloat(kgEl.value) || 0;
   });
 
-  // Sum portions across all proteins
-  const totals = {};
-  AUTO_SPLIT.forEach(s => { totals[s.label] = { g: s.g, group: s.group, pct: s.pct, count: 0 }; });
-
-  stockProteinRows.forEach(r => {
-    if (!r.protein || !r.kg) return;
-    const grams = r.kg * 1000;
-    AUTO_SPLIT.forEach(s => {
-      totals[s.label].count += Math.floor(grams * s.pct / s.g);
-    });
-  });
-
   const totalKg = stockProteinRows.reduce((s, r) => s + (parseFloat(r.kg)||0), 0);
   if (totalKg <= 0) { $('stockProteinPreview').innerHTML = ''; return; }
 
-  const groups = {};
-  Object.entries(totals).forEach(([label, info]) => {
-    if (!groups[info.group]) groups[info.group] = [];
-    groups[info.group].push({ label, count: info.count });
-  });
-
+  const grams = totalKg * 1000;
   let html = `<div style="background:rgba(10,140,154,.07);border-radius:12px;padding:14px;border:1px solid rgba(10,140,154,.2)">
-    <div style="font-size:12px;font-weight:700;color:var(--sea-deep);margin-bottom:10px">Estimated portions from ${totalKg.toFixed(1)} kg</div>`;
-  Object.entries(groups).forEach(([grp, items]) => {
-    const info = STOCK_CATEGORY_INFO[grp] || {};
-    html += `<div style="margin-bottom:8px"><div style="font-size:11px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">${info.label||grp}</div>`;
-    html += `<div style="display:flex;flex-wrap:wrap;gap:6px">`;
-    items.forEach(it => {
-      html += `<span style="background:#fff;border:1px solid var(--line);padding:4px 10px;border-radius:999px;font-size:13px;font-weight:700">${esc(it.label.split('(')[0].trim())}: ${it.count}</span>`;
-    });
-    html += '</div></div>';
+    <div style="font-size:12px;font-weight:700;color:var(--sea-deep);margin-bottom:10px">Bag cuts from ${totalKg.toFixed(1)} kg</div>`;
+  BAG_CUTS.forEach((cut, i) => {
+    const count = Math.floor(grams * cut.pct / cut.g);
+    const isLast = i === BAG_CUTS.length - 1;
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;${isLast?'':'border-bottom:1px solid var(--line)'}">
+      <span style="font-size:13px;color:var(--dim)">${cut.oz}oz · ${cut.label.split('·')[0].trim()}</span>
+      <span style="font-weight:800;font-size:18px;color:${cut.color}">${count}</span>
+    </div>`;
   });
   html += '</div>';
   $('stockProteinPreview').innerHTML = html;
@@ -980,23 +1020,21 @@ async function fillStockFromPrep() {
 }
 
 async function submitOpenShift() {
-  // Collect protein portions
   updateStockPortionPreview();
-  const totals = {};
-  AUTO_SPLIT.forEach(s => { totals[s.label] = { g: s.g, group: s.group, pct: s.pct, count: 0 }; });
-  stockProteinRows.forEach(r => {
-    if (!r.protein || !r.kg) return;
-    const grams = (parseFloat(r.kg)||0) * 1000;
-    AUTO_SPLIT.forEach(s => { totals[s.label].count += Math.floor(grams * s.pct / s.g); });
-  });
 
+  const totalKg = stockProteinRows.reduce((s, r) => s + (parseFloat(r.kg)||0), 0);
   const items = [];
-  // Add protein portion items
-  Object.entries(totals).forEach(([label, info]) => {
-    if (info.count > 0) {
-      items.push({ item_name: label.split('(')[0].trim(), category: info.group, unit: 'portions', start_qty: info.count });
-    }
-  });
+
+  // Add bag-cut items
+  if (totalKg > 0) {
+    const grams = totalKg * 1000;
+    BAG_CUTS.forEach(cut => {
+      const count = Math.floor(grams * cut.pct / cut.g);
+      if (count > 0) {
+        items.push({ item_name: cut.oz + 'oz bags', category: 'protein', unit: 'bags', start_qty: count });
+      }
+    });
+  }
 
   // Add other items
   STOCK_OTHER.forEach(s => {
