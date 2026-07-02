@@ -59,7 +59,7 @@ function go(id){
     if ($('portionCuts'))   $('portionCuts').style.display   = 'none';
     if ($('planNightCard')) $('planNightCard').style.display = 'none';
     if ($('planNightResult')) $('planNightResult').style.display = 'none';
-    ['pPlan6','pPlan8','pPlan10','pPlan12'].forEach(id => { const el = $(id); if(el) el.value=''; });
+    ['pPlan12','pPlan10','pPlan8'].forEach(id => { const el = $(id); if(el) el.value=''; });
     const back = $('seasoningBack');
     if (back) back.onclick = () => go(CURRENT_USER?.role === 'owner' ? 'owner-home' : 'prep-home');
   }
@@ -587,13 +587,13 @@ function calcPlan() {
 
 // ---------- SEASONING + PORTIONS CALCULATOR (combined) ----------
 
-// Bag cut groups — the only sizes prep needs to cut
-// pct = share of the kg going into this bag size
+// Bag cut groups — 3 sizes only; 12oz is primary because it halves bag count
+// 12oz covers: Large basket (full bag) · Small / Burger (split in half) · Mix (scoop to order)
+// pct = share of kg going into each bag size
 const BAG_CUTS = [
-  { oz:  6, g: 170, pct: 0.45, label: 'Basket Small · Burger · Mix stock',       color: 'var(--sea-deep)' },
-  { oz:  8, g: 227, pct: 0.20, label: 'Wraps (Burrito · Quesadilla · Sandwich)', color: '#e67e22' },
-  { oz: 10, g: 283, pct: 0.22, label: 'Basket Medium',                            color: '#FFAA00' },
-  { oz: 12, g: 340, pct: 0.13, label: 'Basket Large',                             color: 'var(--coral)' },
+  { oz: 12, g: 340, pct: 0.58, label: 'Basket Large · split ½ for Small or Burger', color: 'var(--coral)',   primary: true },
+  { oz: 10, g: 283, pct: 0.22, label: 'Basket Medium',                               color: '#FFAA00' },
+  { oz:  8, g: 227, pct: 0.20, label: 'Wraps (Burrito · Quesadilla · Sandwich)',     color: '#e67e22' },
 ];
 
 function calcSeasoning() {
@@ -626,35 +626,39 @@ function calcSeasoning() {
     const count = Math.floor(grams * cut.pct / cut.g);
     const kgUsed = (grams * cut.pct / 1000).toFixed(1);
     const isLast = i === BAG_CUTS.length - 1;
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:13px 0;${isLast?'':'border-bottom:1px solid var(--line)'}">
+    const tag = cut.primary ? `<span style="background:var(--coral);color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle">RECOMMENDED</span>` : '';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;${isLast?'':'border-bottom:1px solid var(--line)'}">
       <div>
-        <div style="font-weight:700;font-size:15px">${cut.oz}oz bags</div>
-        <div style="font-size:12px;color:var(--dim);margin-top:2px">${cut.label} · ${kgUsed} kg</div>
+        <div style="font-weight:700;font-size:15px">${cut.oz}oz bags ${tag}</div>
+        <div style="font-size:12px;color:var(--dim);margin-top:3px">${cut.label} · ${kgUsed} kg</div>
       </div>
       <div style="font-weight:800;font-size:28px;color:${cut.color};min-width:60px;text-align:right">${count}</div>
     </div>`;
   });
-  $('portionCutRows').innerHTML = rows.join('');
+  const totalBags = BAG_CUTS.reduce((s, cut) => s + Math.floor(grams * cut.pct / cut.g), 0);
+  const savedBags = Math.round(Math.floor(grams * 0.45 / 170) - Math.floor(grams * 0.58 / 340));
+  $('portionCutRows').innerHTML = rows.join('') +
+    `<div style="margin-top:12px;padding:10px 12px;background:rgba(0,192,127,.1);border-radius:10px;border:1px solid rgba(0,192,127,.3);font-size:12px;color:#007a50;font-weight:700">
+      ✂️ ${totalBags} bags total — ~${savedBags} fewer bags than cutting 6oz individually
+    </div>`;
   $('portionCuts').style.display = 'block';
   $('planNightCard').style.display = 'block';
 }
 
 function calcPlanNight() {
-  const b6  = parseInt($('pPlan6').value)  || 0;
-  const b8  = parseInt($('pPlan8').value)  || 0;
-  const b10 = parseInt($('pPlan10').value) || 0;
   const b12 = parseInt($('pPlan12').value) || 0;
-  const total = b6 + b8 + b10 + b12;
+  const b10 = parseInt($('pPlan10').value) || 0;
+  const b8  = parseInt($('pPlan8').value)  || 0;
+  const total = b12 + b10 + b8;
   if (!total) { $('planNightResult').style.display = 'none'; return; }
-  const grams = (b6*170) + (b8*227) + (b10*283) + (b12*340);
+  const grams = (b12*340) + (b10*283) + (b8*227);
   const kg = (grams/1000).toFixed(2);
   $('planNightKg').textContent = kg + ' kg';
   const parts = [];
-  if (b6)  parts.push(b6  + ' × 6oz');
-  if (b8)  parts.push(b8  + ' × 8oz');
-  if (b10) parts.push(b10 + ' × 10oz');
   if (b12) parts.push(b12 + ' × 12oz');
-  $('planNightBreak').textContent = parts.join(' · ');
+  if (b10) parts.push(b10 + ' × 10oz');
+  if (b8)  parts.push(b8  + ' × 8oz');
+  $('planNightBreak').textContent = parts.join(' · ') + ' — ' + total + ' bags total';
   $('planNightResult').style.display = 'block';
 }
 
