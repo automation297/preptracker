@@ -22,4 +22,4 @@ services:
 
 databases:
   - name: preptracker-db
-    plan: free
+    plan: basic-256mb
