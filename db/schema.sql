@@ -77,3 +77,36 @@ CREATE TABLE IF NOT EXISTS shift_stock (
   created_at  TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(shift_id, item_name)
 );
+
+CREATE TABLE IF NOT EXISTS staff (
+  id SERIAL PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  display_name TEXT NOT NULL,
+  hourly_rate NUMERIC(6,2) NOT NULL,
+  pin TEXT,
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS time_entries (
+  id SERIAL PRIMARY KEY,
+  staff_id INTEGER NOT NULL REFERENCES staff(id),
+  clock_in TIMESTAMPTZ,
+  clock_out TIMESTAMPTZ,
+  source TEXT NOT NULL CHECK (source IN ('bot','app')),
+  status TEXT NOT NULL DEFAULT 'open'
+    CHECK (status IN ('open','closed','pending_approval','approved')),
+  requested_time TIMESTAMPTZ,
+  linked_entry_id INTEGER REFERENCES time_entries(id),
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_time_entries_staff ON time_entries(staff_id, clock_in);
+
+CREATE TABLE IF NOT EXISTS staff_payouts (
+  id SERIAL PRIMARY KEY,
+  staff_id INTEGER NOT NULL REFERENCES staff(id),
+  week_start DATE NOT NULL,
+  paid_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (staff_id, week_start)
+);
