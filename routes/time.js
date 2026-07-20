@@ -176,4 +176,90 @@ router.post('/approve', requireApiKey, async (req, res) => {
   }
 });
 
+// Monday-Sunday week containing `ref` (defaults to now), in UTC (simple, documented
+// limitation: week boundaries are computed in UTC, not Aruba local time — acceptable
+// since punches themselves are timestamped correctly and this only affects which
+// week a punch made in the first/last few hours of a boundary day is bucketed into).
+function weekBounds(ref = new Date()) {
+  const day = ref.getUTCDay(); // 0=Sun..6=Sat
+  const diffToMonday = (day + 6) % 7;
+  const monday = new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth(), ref.getUTCDate() - diffToMonday, 0, 0, 0));
+  const sunday = new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate() + 6, 23, 59, 59, 999));
+  return { monday, sunday };
+}
+
+async function hoursForStaff(staffId, monday, sunday) {
+  const { rows } = await pool.query(
+    `SELECT * FROM time_entries
+     WHERE staff_id=$1 AND status IN ('closed','approved')
+     AND clock_in >= $2 AND clock_in <= $3
+     ORDER BY clock_in`,
+    [staffId, monday.toISOString(), sunday.toISOString()]
+  );
+  const totalHours = rows.reduce((sum, r) => {
+    if (!r.clock_out) return sum;
+    return sum + (new Date(r.clock_out) - new Date(r.clock_in)) / 3600000;
+  }, 0);
+  return { entries: rows, totalHours: +totalHours.toFixed(2) };
+}
+
+// GET /api/time/hours/:name — this week's entries + total (self-view)
+router.get('/hours/:name', requireApiKey, async (req, res) => {
+  const staff = await findStaff(req.params.name);
+  if (!staff) return res.status(404).json({ error: 'Unknown staff member: ' + req.params.name });
+  const { monday, sunday } = weekBounds();
+  try {
+    const result = await hoursForStaff(staff.id, monday, sunday);
+    res.json({ staff, weekStart: monday.toISOString().slice(0, 10), ...result });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load hours.' });
+  }
+});
+
+// GET /api/time/timesheet — every active staff member's week (owner view)
+router.get('/timesheet', requireApiKey, async (req, res) => {
+  const { monday, sunday } = weekBounds();
+  try {
+    const staffRes = await pool.query('SELECT * FROM staff WHERE active=true ORDER BY display_name');
+    const rows = [];
+    for (const s of staffRes.rows) {
+      const { totalHours } = await hoursForStaff(s.id, monday, sunday);
+      rows.push({ staff: s, hours: totalHours, pay: +(totalHours * s.hourly_rate).toFixed(2) });
+    }
+    res.json({ weekStart: monday.toISOString().slice(0, 10), weekEnd: sunday.toISOString().slice(0, 10), rows });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load timesheet.' });
+  }
+});
+
+// POST /api/time/paid {name} — mark the current week paid
+router.post('/paid', requireApiKey, async (req, res) => {
+  const staff = await findStaff(req.body.name);
+  if (!staff) return res.status(404).json({ error: 'Unknown staff member: ' + req.body.name });
+  const { monday } = weekBounds();
+  try {
+    await pool.query(
+      `INSERT INTO staff_payouts (staff_id, week_start) VALUES ($1,$2)
+       ON CONFLICT (staff_id, week_start) DO UPDATE SET paid_at=NOW()`,
+      [staff.id, monday.toISOString().slice(0, 10)]
+    );
+    res.json({ ok: true, staff, weekStart: monday.toISOString().slice(0, 10) });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not mark as paid.' });
+  }
+});
+
+// POST /api/time/auto-clockout-all — force-close every open entry
+router.post('/auto-clockout-all', requireApiKey, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE time_entries SET clock_out=NOW(), status='closed'
+       WHERE status='open' RETURNING *`
+    );
+    res.json({ closed: rows });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not auto-clockout.' });
+  }
+});
+
 module.exports = router;
