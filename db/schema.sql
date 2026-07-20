@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS time_entries (
   status TEXT NOT NULL DEFAULT 'open'
     CHECK (status IN ('open','closed','pending_approval','approved')),
   requested_time TIMESTAMPTZ,
+  correction_field TEXT CHECK (correction_field IN ('in','out')),
   linked_entry_id INTEGER REFERENCES time_entries(id),
   notes TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

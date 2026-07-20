@@ -48,8 +48,8 @@ router.post('/clock-in', requireApiKey, async (req, res) => {
     let pendingNote = null;
     if (requestedValid && !withinWindow) {
       await pool.query(
-        `INSERT INTO time_entries (staff_id, requested_time, source, status, linked_entry_id, notes)
-         VALUES ($1,$2,$3,'pending_approval',$4,'Clock-in time correction request')`,
+        `INSERT INTO time_entries (staff_id, requested_time, source, status, linked_entry_id, correction_field, notes)
+         VALUES ($1,$2,$3,'pending_approval',$4,'in','Clock-in time correction request')`,
         [staff.id, requestedTime.toISOString(), source, entry.id]
       );
       pendingNote = 'Requested time was more than 15 min from now — clocked in at current time, your requested time was sent for owner approval.';
@@ -94,8 +94,8 @@ router.post('/clock-out', requireApiKey, async (req, res) => {
     let pendingNote = null;
     if (requestedValid && !withinWindow) {
       await pool.query(
-        `INSERT INTO time_entries (staff_id, requested_time, source, status, linked_entry_id, notes)
-         VALUES ($1,$2,$3,'pending_approval',$4,'Clock-out time correction request')`,
+        `INSERT INTO time_entries (staff_id, requested_time, source, status, linked_entry_id, correction_field, notes)
+         VALUES ($1,$2,$3,'pending_approval',$4,'out','Clock-out time correction request')`,
         [staff.id, requestedTime.toISOString(), source, closed.id]
       );
       pendingNote = 'Requested time was more than 15 min from now — clocked out at current time, your requested time was sent for owner approval.';
@@ -126,9 +126,9 @@ router.post('/correction', requireApiKey, async (req, res) => {
       if (openRes.rows.length) linkedId = openRes.rows[0].id;
     }
     const { rows } = await pool.query(
-      `INSERT INTO time_entries (staff_id, requested_time, source, status, linked_entry_id, notes)
-       VALUES ($1,$2,'bot','pending_approval',$3,$4) RETURNING *`,
-      [staff.id, requested.toISOString(), linkedId, `Clock-${field} correction for ${req.body.date} ${req.body.time}`]
+      `INSERT INTO time_entries (staff_id, requested_time, source, status, linked_entry_id, correction_field, notes)
+       VALUES ($1,$2,'bot','pending_approval',$3,$4,$5) RETURNING *`,
+      [staff.id, requested.toISOString(), linkedId, field, `Clock-${field} correction for ${req.body.date} ${req.body.time}`]
     );
     res.json({ correction: rows[0], staff });
   } catch (e) {
@@ -152,19 +152,21 @@ router.post('/approve', requireApiKey, async (req, res) => {
     }
     const pending = pendingRes.rows[0];
     if (pending.linked_entry_id) {
-      const linked = await pool.query('SELECT * FROM time_entries WHERE id=$1', [pending.linked_entry_id]);
-      const isOutCorrection = linked.rows[0] && linked.rows[0].clock_out === null;
-      const col = isOutCorrection ? 'clock_out' : 'clock_in';
-      await pool.query(
-        `UPDATE time_entries SET ${col}=$1, status='closed' WHERE id=$2`,
+      const col = pending.correction_field === 'out' ? 'clock_out' : 'clock_in';
+      const updateRes = await pool.query(
+        `UPDATE time_entries SET ${col}=$1, status='closed' WHERE id=$2 RETURNING id`,
         [pending.requested_time, pending.linked_entry_id]
       );
+      if (!updateRes.rows.length) {
+        return res.status(409).json({ error: 'The original entry for this correction no longer exists.' });
+      }
     } else {
       // Standalone missed-punch correction with no existing entry — the
       // correction row itself becomes the record; needs both a clock_in
       // and clock_out to count toward hours, so mark it approved but note
       // it may need a matching punch to compute hours.
-      await pool.query(`UPDATE time_entries SET clock_in=$1 WHERE id=$2`, [pending.requested_time, pending.id]);
+      const col = pending.correction_field === 'out' ? 'clock_out' : 'clock_in';
+      await pool.query(`UPDATE time_entries SET ${col}=$1 WHERE id=$2`, [pending.requested_time, pending.id]);
     }
     await pool.query(`UPDATE time_entries SET status='approved' WHERE id=$1`, [pending.id]);
     res.json({ ok: true, approved: pending });
