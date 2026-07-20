@@ -81,6 +81,7 @@ app.use('/api/inventory', require('./routes/inventory'));
 app.use('/api/push',      require('./routes/push'));
 app.use('/api/purchases', require('./routes/purchases'));
 app.use('/api/stock',     require('./routes/stock'));
+app.use('/api/staff',     require('./routes/staff'));
 
 app.get('/api/vapid-key', (req, res) => res.json({ key: process.env.VAPID_PUBLIC_KEY || '' }));
 
