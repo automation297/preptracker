@@ -102,6 +102,8 @@ CREATE TABLE IF NOT EXISTS time_entries (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_time_entries_staff ON time_entries(staff_id, clock_in);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_time_entries_one_open_per_staff
+  ON time_entries(staff_id) WHERE status='open';
 
 CREATE TABLE IF NOT EXISTS staff_payouts (
   id SERIAL PRIMARY KEY,

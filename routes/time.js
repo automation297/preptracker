@@ -15,9 +15,9 @@ async function findStaff(name) {
 // POST /api/time/clock-in {name, source, requestedTime?}
 router.post('/clock-in', requireApiKey, async (req, res) => {
   const source = req.body.source === 'app' ? 'app' : 'bot';
-  const staff = await findStaff(req.body.name);
-  if (!staff) return res.status(404).json({ error: 'Unknown staff member: ' + req.body.name });
   try {
+    const staff = await findStaff(req.body.name);
+    if (!staff) return res.status(404).json({ error: 'Unknown staff member: ' + req.body.name });
     const openRes = await pool.query(
       `SELECT * FROM time_entries WHERE staff_id=$1 AND status='open'`, [staff.id]
     );
@@ -30,12 +30,20 @@ router.post('/clock-in', requireApiKey, async (req, res) => {
     const withinWindow = requestedValid && Math.abs(now.getTime() - requestedTime.getTime()) <= FIFTEEN_MIN_MS;
     const clockIn = withinWindow ? requestedTime : now;
 
-    const { rows } = await pool.query(
-      `INSERT INTO time_entries (staff_id, clock_in, source, status, requested_time)
-       VALUES ($1,$2,$3,'open',$4) RETURNING *`,
-      [staff.id, clockIn.toISOString(), source, requestedValid ? requestedTime.toISOString() : null]
-    );
-    const entry = rows[0];
+    let entry;
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO time_entries (staff_id, clock_in, source, status, requested_time)
+         VALUES ($1,$2,$3,'open',$4) RETURNING *`,
+        [staff.id, clockIn.toISOString(), source, requestedValid ? requestedTime.toISOString() : null]
+      );
+      entry = rows[0];
+    } catch (e) {
+      if (e.code === '23505') {
+        return res.status(409).json({ error: staff.display_name + ' is already clocked in.' });
+      }
+      throw e;
+    }
 
     let pendingNote = null;
     if (requestedValid && !withinWindow) {
@@ -56,9 +64,9 @@ router.post('/clock-in', requireApiKey, async (req, res) => {
 // POST /api/time/clock-out {name, source, requestedTime?}
 router.post('/clock-out', requireApiKey, async (req, res) => {
   const source = req.body.source === 'app' ? 'app' : 'bot';
-  const staff = await findStaff(req.body.name);
-  if (!staff) return res.status(404).json({ error: 'Unknown staff member: ' + req.body.name });
   try {
+    const staff = await findStaff(req.body.name);
+    if (!staff) return res.status(404).json({ error: 'Unknown staff member: ' + req.body.name });
     const openRes = await pool.query(
       `SELECT * FROM time_entries WHERE staff_id=$1 AND status='open' ORDER BY clock_in DESC LIMIT 1`,
       [staff.id]
@@ -74,9 +82,12 @@ router.post('/clock-out', requireApiKey, async (req, res) => {
     const clockOut = withinWindow ? requestedTime : now;
 
     const { rows } = await pool.query(
-      `UPDATE time_entries SET clock_out=$1, status='closed' WHERE id=$2 RETURNING *`,
+      `UPDATE time_entries SET clock_out=$1, status='closed' WHERE id=$2 AND status='open' RETURNING *`,
       [clockOut.toISOString(), entry.id]
     );
+    if (!rows.length) {
+      return res.status(409).json({ error: staff.display_name + ' was already clocked out (possibly by a concurrent request).' });
+    }
     const closed = rows[0];
     const hours = (new Date(closed.clock_out) - new Date(closed.clock_in)) / 3600000;
 
