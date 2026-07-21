@@ -219,6 +219,7 @@ router.get('/hours/:name', requireApiKey, async (req, res) => {
 // GET /api/time/timesheet — every active staff member's week (owner view)
 router.get('/timesheet', requireApiKey, async (req, res) => {
   const refDate = req.query.ref ? new Date(req.query.ref) : new Date();
+  if (isNaN(refDate.getTime())) return res.status(400).json({ error: 'Invalid ref date.' });
   const { monday, sunday } = weekBounds(refDate);
   try {
     const staffRes = await pool.query('SELECT * FROM staff WHERE active=true ORDER BY display_name');
@@ -238,6 +239,7 @@ router.post('/paid', requireApiKey, async (req, res) => {
   const staff = await findStaff(req.body.name);
   if (!staff) return res.status(404).json({ error: 'Unknown staff member: ' + req.body.name });
   const refDate = req.body.ref ? new Date(req.body.ref) : new Date();
+  if (isNaN(refDate.getTime())) return res.status(400).json({ error: 'Invalid ref date.' });
   const { monday } = weekBounds(refDate);
   try {
     await pool.query(
