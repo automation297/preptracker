@@ -203,14 +203,24 @@ async function hoursForStaff(staffId, monday, sunday) {
   return { entries: rows, totalHours: +totalHours.toFixed(2) };
 }
 
-// GET /api/time/hours/:name — this week's entries + total (self-view)
+// GET /api/time/hours/:name — this week's entries + total (self-view).
+// Optional ?days=N widens the window to the last N days instead of the
+// current Mon-Sun week (used by the cashier app's month/history view).
 router.get('/hours/:name', requireApiKey, async (req, res) => {
   const staff = await findStaff(req.params.name);
   if (!staff) return res.status(404).json({ error: 'Unknown staff member: ' + req.params.name });
-  const { monday, sunday } = weekBounds();
+  let start, end;
+  if (req.query.days !== undefined) {
+    const days = parseInt(req.query.days, 10);
+    if (isNaN(days) || days <= 0) return res.status(400).json({ error: 'Invalid days.' });
+    end = new Date();
+    start = new Date(end.getTime() - days * 24 * 3600 * 1000);
+  } else {
+    ({ monday: start, sunday: end } = weekBounds());
+  }
   try {
-    const result = await hoursForStaff(staff.id, monday, sunday);
-    res.json({ staff, weekStart: monday.toISOString().slice(0, 10), ...result });
+    const result = await hoursForStaff(staff.id, start, end);
+    res.json({ staff, weekStart: start.toISOString().slice(0, 10), ...result });
   } catch (e) {
     res.status(500).json({ error: 'Could not load hours.' });
   }
