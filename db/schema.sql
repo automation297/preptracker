@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS purchases (
   created_by INTEGER REFERENCES users(id),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'business'
+  CHECK (scope IN ('business','personal'));
 
 -- Nightly shift sessions
 CREATE TABLE IF NOT EXISTS shift_sessions (
