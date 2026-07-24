@@ -1,9 +1,19 @@
 const express = require('express');
 const pool    = require('../db/pool');
 const { requireAuth, requireOwner } = require('./auth');
+const { hasValidApiKey } = require('./apiAuth');
 const router  = express.Router();
 
-// GET /api/purchases?range=today|week|month
+// Accepts either a valid PREPTRACKER_API_KEY header (for the bot's automated
+// receipt-logging) or the existing owner-session auth (for the app's own UI).
+function requireOwnerOrApiKey(req, res, next) {
+  if (hasValidApiKey(req)) return next();
+  if (!req.session.userId) return res.status(401).json({ error: 'Please log in.' });
+  if (req.session.role !== 'owner') return res.status(403).json({ error: 'Owner only.' });
+  next();
+}
+
+// GET /api/purchases?range=today|week|month&scope=business|personal|all
 router.get('/', requireAuth, async (req, res) => {
   const range = req.query.range || 'today';
   let dateFilter;
@@ -11,11 +21,15 @@ router.get('/', requireAuth, async (req, res) => {
   else if (range === 'week') dateFilter = "bought_at >= date_trunc('week', CURRENT_DATE)";
   else dateFilter = "bought_at = CURRENT_DATE";
 
+  const scope = req.query.scope || 'business';
+  const scopeFilter = scope === 'all' ? '1=1' : 'p.scope = $1';
+
   try {
     const { rows } = await pool.query(
       `SELECT p.*, u.name AS by_name
        FROM purchases p LEFT JOIN users u ON u.id = p.created_by
-       WHERE ${dateFilter} ORDER BY p.bought_at DESC, p.created_at DESC`
+       WHERE ${dateFilter} AND ${scopeFilter} ORDER BY p.bought_at DESC, p.created_at DESC`,
+      scope === 'all' ? [] : [scope]
     );
     const total = rows.reduce((s, r) => s + parseFloat(r.price_fl), 0);
     const byCategory = {};
@@ -29,18 +43,21 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/purchases — log a purchase (owner only)
-router.post('/', requireOwner, async (req, res) => {
-  const { item_name, category, price_fl, qty, unit, notes, bought_at } = req.body;
+// POST /api/purchases — log a purchase (owner, or the bot via API key)
+router.post('/', requireOwnerOrApiKey, async (req, res) => {
+  const { item_name, category, price_fl, qty, unit, notes, bought_at, scope } = req.body;
   if (!item_name || price_fl == null || qty == null || !unit) {
     return res.status(400).json({ error: 'item_name, price_fl, qty and unit are required.' });
   }
+  if (scope !== undefined && scope !== 'business' && scope !== 'personal') {
+    return res.status(400).json({ error: "scope must be 'business' or 'personal'." });
+  }
   try {
     const { rows } = await pool.query(
-      `INSERT INTO purchases (item_name, category, price_fl, qty, unit, notes, bought_at, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::date, CURRENT_DATE),$8) RETURNING *`,
+      `INSERT INTO purchases (item_name, category, price_fl, qty, unit, notes, bought_at, created_by, scope)
+       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::date, CURRENT_DATE),$8,COALESCE($9,'business')) RETURNING *`,
       [item_name, category || 'other', Number(price_fl), Number(qty), unit,
-       notes || null, bought_at || null, req.session.userId]
+       notes || null, bought_at || null, (req.session && req.session.userId) || null, scope || null]
     );
     res.status(201).json({ purchase: rows[0] });
   } catch (e) {
