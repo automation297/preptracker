@@ -17,11 +17,11 @@ function requireOwner(req, res, next) {
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   const pin = String(req.body.pin || '').trim();
-  if (pin.length !== 6 || !/^\d{6}$/.test(pin)) {
-    return res.status(400).json({ error: 'Enter a 6-digit PIN.' });
+  if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+    return res.status(400).json({ error: 'Enter a 4-digit PIN.' });
   }
   try {
-    const { rows } = await pool.query('SELECT * FROM users ORDER BY id');
+    const { rows } = await pool.query('SELECT * FROM users WHERE active=true ORDER BY id');
     for (const user of rows) {
       if (await bcrypt.compare(pin, user.pin_hash)) {
         req.session.regenerate(err => {
@@ -63,8 +63,8 @@ router.get('/me', async (req, res) => {
 // PATCH /api/auth/pin/:userId — owner changes any user's PIN
 router.patch('/pin/:userId', requireAuth, requireOwner, async (req, res) => {
   const pin = String(req.body.pin || '').trim();
-  if (pin.length !== 6 || !/^\d{6}$/.test(pin)) {
-    return res.status(400).json({ error: 'PIN must be exactly 6 digits.' });
+  if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+    return res.status(400).json({ error: 'PIN must be exactly 4 digits.' });
   }
   try {
     const hash = await bcrypt.hash(pin, 10);

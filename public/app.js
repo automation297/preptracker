@@ -7,7 +7,7 @@ const $ = id => document.getElementById(id);
 
 const T = {
   en: {
-    pinTitle:'Enter your PIN', pinSub:'6-digit code', pinWrong:'Wrong PIN. Try again.',
+    pinTitle:'Enter your PIN', pinSub:'4-digit code', pinWrong:'Wrong PIN. Try again.',
     atFranklins:"At Franklin's", inventorySub:'Current inventory', newDropoff:'+ Drop-off',
     history:'History', viewAll:'View all →', toProcess:'To Process', toProcessSub:'Log your progress below',
     saveDropoff:'Save Drop-off', dropoffDetail:'Drop-off Detail', settings:'Settings',
@@ -18,7 +18,7 @@ const T = {
     save:'Save', cancel:'Cancel',
   },
   pap: {
-    pinTitle:'Pon bo PIN', pinSub:'6 sífra', pinWrong:'PIN robes. Purba di nuevo.',
+    pinTitle:'Pon bo PIN', pinSub:'4 sífra', pinWrong:'PIN robes. Purba di nuevo.',
     atFranklins:'Na Franklin su kas', inventorySub:'Inventario aktual', newDropoff:'+ Entrega',
     history:'Historial', viewAll:'Mira tur →', toProcess:'Pa Prepará', toProcessSub:'Log bo progreso aki',
     saveDropoff:'Salbá Entrega', dropoffDetail:'Detaye di Entrega', settings:'Konfigurasjon',
@@ -104,17 +104,17 @@ function fmtDate(d){ return new Date(d).toLocaleDateString('en-US',{month:'short
 let PIN = '';
 
 function updateDots() {
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 4; i++) {
     $('d'+i).classList.toggle('filled', i < PIN.length);
   }
 }
 
 function pinKey(digit) {
-  if (PIN.length >= 6) return;
+  if (PIN.length >= 4) return;
   PIN += digit;
   updateDots();
   $('pinError').textContent = '';
-  if (PIN.length === 6) submitPin();
+  if (PIN.length === 4) submitPin();
 }
 
 function pinBack() {
@@ -353,10 +353,10 @@ async function loadSettings() {
   $('settingsContent').innerHTML = `
     <div class="card">
       <div style="font-weight:800;margin-bottom:16px">${t('pinChange')}</div>
-      <div class="field"><label>User ID (1=Owner, 2=Franklin, 3=Mama Franklin)</label>
-        <input type="number" id="pinUserId" min="1" max="3" placeholder="e.g. 2"></div>
-      <div class="field"><label>New PIN (6 digits)</label>
-        <input type="text" id="newPinVal" maxlength="6" placeholder="••••••" inputmode="numeric"></div>
+      <div class="field"><label>User ID (1=Owner, 3=Rocio)</label>
+        <input type="number" id="pinUserId" min="1" max="3" placeholder="e.g. 3"></div>
+      <div class="field"><label>New PIN (4 digits)</label>
+        <input type="text" id="newPinVal" maxlength="4" placeholder="••••" inputmode="numeric"></div>
       <button class="btn btn-primary" style="width:100%" onclick="changePin()">${t('save')}</button>
     </div>`;
 }
@@ -364,7 +364,7 @@ async function loadSettings() {
 async function changePin() {
   const userId = $('pinUserId').value;
   const pin = $('newPinVal').value.trim();
-  if (!/^\d{6}$/.test(pin)) { toast('PIN must be exactly 6 digits.'); return; }
+  if (!/^\d{4}$/.test(pin)) { toast('PIN must be exactly 4 digits.'); return; }
   try {
     await api('/auth/pin/'+userId, { method: 'PATCH', body: JSON.stringify({ pin }) });
     toast('PIN updated!');

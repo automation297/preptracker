@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
   push_subscription JSONB,
   created_at       TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
 
 CREATE TABLE IF NOT EXISTS dropoffs (
   id          SERIAL PRIMARY KEY,
