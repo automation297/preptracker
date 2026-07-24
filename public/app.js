@@ -43,10 +43,13 @@ function go(id){
   if (id === 'purchases') {
     const back = $('purchasesBack');
     if (back) back.onclick = () => go(CURRENT_USER?.role === 'owner' ? 'owner-home' : 'prep-home');
-    if (CURRENT_USER?.role === 'owner') { $('purchaseAddCard').style.display = ''; }
-    else { $('purchaseAddCard').style.display = 'none'; }
     renderPurchaseItemDropdown();
-    switchPurchaseTab('today');
+    PURCHASE_TAB = 'today';
+    ['Today','Week','Month'].forEach(t => {
+      const btn = $('tab'+t);
+      if (btn) btn.className = 'btn btn-sm' + (t.toLowerCase() === 'today' ? ' btn-primary' : ' btn-ghost');
+    });
+    switchPurchaseScope('business');
   }
   if (id === 'stock') {
     const back = $('stockBack');
@@ -766,6 +769,7 @@ function updatePurchasePreview() {
 }
 
 let PURCHASE_TAB = 'today';
+let PURCHASE_SCOPE = 'business';
 
 async function switchPurchaseTab(range) {
   PURCHASE_TAB = range;
@@ -776,18 +780,33 @@ async function switchPurchaseTab(range) {
   await loadPurchases(range);
 }
 
+async function switchPurchaseScope(scope) {
+  PURCHASE_SCOPE = scope;
+  $('scopeBusiness').className = 'btn btn-sm' + (scope === 'business' ? ' btn-primary' : ' btn-ghost');
+  $('scopePersonal').className = 'btn btn-sm' + (scope === 'personal' ? ' btn-primary' : ' btn-ghost');
+  // The quick-add form only logs business (food-truck ingredient) purchases, and
+  // only owners can log them at all — personal spending is captured automatically
+  // from receipts sent to the bot, so hide the form outside Business+owner view.
+  const addCard = $('purchaseAddCard');
+  if (addCard) addCard.style.display = (scope === 'business' && CURRENT_USER?.role === 'owner') ? '' : 'none';
+  await loadPurchases(PURCHASE_TAB);
+}
+
 async function loadPurchases(range) {
   const el = $('purchaseList');
   el.innerHTML = '<div class="empty"><p>Loading…</p></div>';
   try {
-    const data = await api('/purchases?range=' + range);
+    const data = await api('/purchases?range=' + range + '&scope=' + PURCHASE_SCOPE);
     if (!data.purchases.length) {
-      el.innerHTML = '<div class="empty"><h3>No purchases yet</h3><p>Log your first purchase above.</p></div>';
+      const hint = PURCHASE_SCOPE === 'personal'
+        ? 'Personal receipts sent to the WhatsApp bot will show up here.'
+        : 'Log your first purchase above.';
+      el.innerHTML = `<div class="empty"><h3>No ${PURCHASE_SCOPE} purchases yet</h3><p>${hint}</p></div>`;
       return;
     }
     const total = parseFloat(data.total);
     let html = `<div class="card" style="margin-bottom:8px;background:linear-gradient(135deg,var(--sea-deep),var(--sea));color:#fff">
-      <div style="font-size:13px;opacity:.8;margin-bottom:4px">Total spent ${range === 'today' ? 'today' : range === 'week' ? 'this week' : 'this month'}</div>
+      <div style="font-size:13px;opacity:.8;margin-bottom:4px">${PURCHASE_SCOPE === 'personal' ? 'Personal' : 'Business'} spend ${range === 'today' ? 'today' : range === 'week' ? 'this week' : 'this month'}</div>
       <div style="font-size:32px;font-weight:800">FL ${total.toFixed(2)}</div>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">`;
     Object.entries(data.byCategory).sort((a,b) => b[1]-a[1]).forEach(([cat, amt]) => {

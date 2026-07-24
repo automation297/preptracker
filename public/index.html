@@ -439,8 +439,14 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
       <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:4px" onclick="submitPurchase()">Save purchase</button>
     </div>
 
+    <!-- Scope: business (food truck) vs personal spending -->
+    <div style="display:flex;gap:8px;margin:16px 0 8px">
+      <button class="btn btn-sm" id="scopeBusiness" onclick="switchPurchaseScope('business')" style="flex:1;justify-content:center">🌯 Business</button>
+      <button class="btn btn-sm" id="scopePersonal" onclick="switchPurchaseScope('personal')" style="flex:1;justify-content:center">💳 Personal</button>
+    </div>
+
     <!-- Tabs -->
-    <div style="display:flex;gap:8px;margin:16px 0 12px">
+    <div style="display:flex;gap:8px;margin:0 0 12px">
       <button class="btn btn-sm" id="tabToday" onclick="switchPurchaseTab('today')" style="flex:1;justify-content:center">Today</button>
       <button class="btn btn-sm" id="tabWeek"  onclick="switchPurchaseTab('week')"  style="flex:1;justify-content:center">This Week</button>
       <button class="btn btn-sm" id="tabMonth" onclick="switchPurchaseTab('month')" style="flex:1;justify-content:center">This Month</button>
