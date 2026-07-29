@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS purchases (
 );
 ALTER TABLE purchases ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'business'
   CHECK (scope IN ('business','personal'));
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS weight_kg NUMERIC(8,3);
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS protein_type TEXT;
 
 -- Nightly shift sessions
 CREATE TABLE IF NOT EXISTS shift_sessions (

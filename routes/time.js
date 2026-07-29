@@ -188,27 +188,51 @@ function weekBounds(ref = new Date()) {
   return { monday, sunday };
 }
 
-async function hoursForStaff(staffId, monday, sunday) {
+async function hoursForStaff(staffId, monday, sunday, { includeOpen = false } = {}) {
+  const statuses = includeOpen ? "'closed','approved','open'" : "'closed','approved'";
   const { rows } = await pool.query(
     `SELECT * FROM time_entries
-     WHERE staff_id=$1 AND status IN ('closed','approved')
+     WHERE staff_id=$1 AND status IN (${statuses})
      AND clock_in >= $2 AND clock_in <= $3
      ORDER BY clock_in`,
     [staffId, monday.toISOString(), sunday.toISOString()]
   );
+  const now = new Date();
   const totalHours = rows.reduce((sum, r) => {
-    if (!r.clock_out) return sum;
-    return sum + (new Date(r.clock_out) - new Date(r.clock_in)) / 3600000;
+    // An 'open' entry has no clock_out yet — count it up to right now instead
+    // of skipping it, so "hours so far" reflects a still-running punch live.
+    const clockOutTime = r.clock_out ? new Date(r.clock_out) : (includeOpen && r.status === 'open' ? now : null);
+    if (!clockOutTime) return sum;
+    return sum + (clockOutTime - new Date(r.clock_in)) / 3600000;
   }, 0);
   return { entries: rows, totalHours: +totalHours.toFixed(2) };
+}
+
+// Aruba has no DST — a fixed -04:00 offset day boundary, same convention the
+// bot uses for typed-time punches.
+function arubaTodayBounds() {
+  const todayAruba = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Aruba' });
+  return { start: new Date(`${todayAruba}T00:00:00-04:00`), end: new Date(`${todayAruba}T23:59:59-04:00`) };
 }
 
 // GET /api/time/hours/:name — this week's entries + total (self-view).
 // Optional ?days=N widens the window to the last N days instead of the
 // current Mon-Sun week (used by the cashier app's month/history view).
+// Optional ?ref=<date> shifts which Mon-Sun week is shown (e.g. last week).
+// Optional ?today=1 returns TODAY only and includes a still-open punch,
+// counted live up to now — used for "hours so far" mid-shift.
 router.get('/hours/:name', requireApiKey, async (req, res) => {
   const staff = await findStaff(req.params.name);
   if (!staff) return res.status(404).json({ error: 'Unknown staff member: ' + req.params.name });
+  if (req.query.today !== undefined) {
+    const { start, end } = arubaTodayBounds();
+    try {
+      const result = await hoursForStaff(staff.id, start, end, { includeOpen: true });
+      return res.json({ staff, today: start.toISOString().slice(0, 10), ...result });
+    } catch (e) {
+      return res.status(500).json({ error: 'Could not load hours.' });
+    }
+  }
   let start, end;
   if (req.query.days !== undefined) {
     const days = parseInt(req.query.days, 10);
@@ -216,7 +240,9 @@ router.get('/hours/:name', requireApiKey, async (req, res) => {
     end = new Date();
     start = new Date(end.getTime() - days * 24 * 3600 * 1000);
   } else {
-    ({ monday: start, sunday: end } = weekBounds());
+    const refDate = req.query.ref ? new Date(req.query.ref) : new Date();
+    if (isNaN(refDate.getTime())) return res.status(400).json({ error: 'Invalid ref date.' });
+    ({ monday: start, sunday: end } = weekBounds(refDate));
   }
   try {
     const result = await hoursForStaff(staff.id, start, end);
@@ -267,8 +293,9 @@ router.post('/paid', requireApiKey, async (req, res) => {
 router.post('/auto-clockout-all', requireApiKey, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `UPDATE time_entries SET clock_out=NOW(), status='closed'
-       WHERE status='open' RETURNING *`
+      `UPDATE time_entries e SET clock_out=NOW(), status='closed'
+       WHERE status='open'
+       RETURNING e.*, (SELECT display_name FROM staff WHERE staff.id = e.staff_id) AS display_name`
     );
     res.json({ closed: rows });
   } catch (e) {
