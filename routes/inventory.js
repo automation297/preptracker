@@ -1,8 +1,18 @@
 const express = require('express');
 const pool    = require('../db/pool');
 const { requireAuth } = require('./auth');
-const { requireApiKey } = require('./apiAuth');
+const { hasValidApiKey } = require('./apiAuth');
 const router  = express.Router();
+
+// Accepts either a valid PREPTRACKER_API_KEY (the bot, decrementing ready_qty on a
+// completed sale) or the existing staff-session auth (the app's own "Dinner" button,
+// any role) -- same pattern as requireOwnerOrApiKey in routes/purchases.js, just not
+// owner-restricted since any staff role can use the Dinner button today.
+function requireAuthOrApiKey(req, res, next) {
+  if (hasValidApiKey(req)) return next();
+  if (!req.session.userId) return res.status(401).json({ error: 'Please log in.' });
+  next();
+}
 
 // GET /api/inventory — all open items at Franklin's
 router.get('/', requireAuth, async (req, res) => {
@@ -62,11 +72,12 @@ async function adjustInventory(itemName, category, unit, rawDelta, readyDelta) {
 // POST /api/inventory/consume {item_name, qty, staff_name, reason} — the "Dinner"
 // button. Deducts from ready_qty (never raw_qty -- staff eat finished/prepped food,
 // not raw ingredients) and logs who/what/when for accountability.
-router.post('/consume', requireAuth, async (req, res) => {
+router.post('/consume', requireAuthOrApiKey, async (req, res) => {
   const itemName = String(req.body.item_name || '').trim();
   const qty = Number(req.body.qty);
   const reason = String(req.body.reason || 'dinner').trim().slice(0, 40);
-  const staffName = String(req.body.staff_name || req.session.name || '').trim().slice(0, 60) || null;
+  const staffName = String(req.body.staff_name || (req.session && req.session.name) || '').trim().slice(0, 60) || null;
+  const createdBy = (req.session && req.session.userId) || null; // null for the bot's API-key calls (no session)
   if (!itemName) return res.status(400).json({ error: 'item_name is required.' });
   if (!qty || qty <= 0) return res.status(400).json({ error: 'qty must be greater than 0.' });
   try {
@@ -75,7 +86,7 @@ router.post('/consume', requireAuth, async (req, res) => {
     await adjustInventory(itemName, rows[0].category, rows[0].unit, 0, -qty);
     await pool.query(
       'INSERT INTO inventory_consumption (item_name, qty, reason, staff_name, created_by) VALUES ($1,$2,$3,$4,$5)',
-      [itemName, qty, reason, staffName, req.session.userId]
+      [itemName, qty, reason, staffName, createdBy]
     );
     res.json({ ok: true });
   } catch (e) {
