@@ -118,12 +118,16 @@ router.post('/correction', requireApiKey, async (req, res) => {
   try {
     let linkedId = null;
     if (field === 'out') {
-      const openRes = await pool.query(
-        `SELECT * FROM time_entries WHERE staff_id=$1 AND status='open'
+      // Link to that day's entry whether it's still open (forgot to clock out) or
+      // already closed (e.g. auto-clocked-out by shift close and the real departure
+      // time needs fixing) — status IN (...) instead of ='open' only, so a correction
+      // after auto-clockout updates the real entry instead of creating an orphan row.
+      const entryRes = await pool.query(
+        `SELECT * FROM time_entries WHERE staff_id=$1 AND status IN ('open','closed','approved')
          AND clock_in::date = $2::date ORDER BY clock_in DESC LIMIT 1`,
         [staff.id, req.body.date]
       );
-      if (openRes.rows.length) linkedId = openRes.rows[0].id;
+      if (entryRes.rows.length) linkedId = entryRes.rows[0].id;
     }
     const { rows } = await pool.query(
       `INSERT INTO time_entries (staff_id, requested_time, source, status, linked_entry_id, correction_field, notes)
