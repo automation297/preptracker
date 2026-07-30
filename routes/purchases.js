@@ -48,7 +48,7 @@ router.get('/', requireOwnerOrApiKey, async (req, res) => {
 
 // POST /api/purchases — log a purchase (owner, or the bot via API key)
 router.post('/', requireOwnerOrApiKey, async (req, res) => {
-  const { item_name, category, price_fl, qty, unit, notes, bought_at, scope, weight_kg, protein_type, protein_price_fl } = req.body;
+  const { item_name, category, price_fl, qty, unit, notes, bought_at, scope, weight_kg, protein_type, protein_price_fl, unit_count } = req.body;
   if (!item_name || price_fl == null || qty == null || !unit) {
     return res.status(400).json({ error: 'item_name, price_fl, qty and unit are required.' });
   }
@@ -57,12 +57,13 @@ router.post('/', requireOwnerOrApiKey, async (req, res) => {
   }
   try {
     const { rows } = await pool.query(
-      `INSERT INTO purchases (item_name, category, price_fl, qty, unit, notes, bought_at, created_by, scope, weight_kg, protein_type, protein_price_fl)
-       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::date, CURRENT_DATE),$8,COALESCE($9,'business'),$10,$11,$12) RETURNING *`,
+      `INSERT INTO purchases (item_name, category, price_fl, qty, unit, notes, bought_at, created_by, scope, weight_kg, protein_type, protein_price_fl, unit_count)
+       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::date, CURRENT_DATE),$8,COALESCE($9,'business'),$10,$11,$12,$13) RETURNING *`,
       [item_name, category || 'other', Number(price_fl), Number(qty), unit,
        notes || null, bought_at || null, (req.session && req.session.userId) || null, scope || null,
        weight_kg != null ? Number(weight_kg) : null, protein_type || null,
-       protein_price_fl != null ? Number(protein_price_fl) : null]
+       protein_price_fl != null ? Number(protein_price_fl) : null,
+       unit_count != null ? parseInt(unit_count, 10) : null]
     );
     res.status(201).json({ purchase: rows[0] });
   } catch (e) {

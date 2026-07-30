@@ -63,6 +63,9 @@ ALTER TABLE purchases ADD COLUMN IF NOT EXISTS protein_type TEXT;
 -- total). A bundled multi-item receipt's total is not the protein's own cost — see
 -- CLAUDE.md "protein_price_fl" note for the real bug this fixes.
 ALTER TABLE purchases ADD COLUMN IF NOT EXISTS protein_price_fl NUMERIC(8,2);
+-- Individual piece count for unit-portioned proteins (hotdogs) -- these portion by
+-- piece count, not oz weight, so weight_kg doesn't drive their prep math.
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS unit_count INTEGER;
 
 -- Nightly shift sessions
 CREATE TABLE IF NOT EXISTS shift_sessions (
