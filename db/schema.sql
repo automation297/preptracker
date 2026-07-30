@@ -59,6 +59,10 @@ ALTER TABLE purchases ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'busi
   CHECK (scope IN ('business','personal'));
 ALTER TABLE purchases ADD COLUMN IF NOT EXISTS weight_kg NUMERIC(8,3);
 ALTER TABLE purchases ADD COLUMN IF NOT EXISTS protein_type TEXT;
+-- Price for JUST the protein line item, separate from price_fl (the whole receipt's
+-- total). A bundled multi-item receipt's total is not the protein's own cost — see
+-- CLAUDE.md "protein_price_fl" note for the real bug this fixes.
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS protein_price_fl NUMERIC(8,2);
 
 -- Nightly shift sessions
 CREATE TABLE IF NOT EXISTS shift_sessions (
