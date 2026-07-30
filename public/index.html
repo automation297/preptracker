@@ -137,6 +137,7 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
       <button class="btn btn-ghost btn-sm" onclick="go('seasoning')">🧂</button>
       <button class="btn btn-ghost btn-sm" onclick="go('purchases')">🛒</button>
       <button class="btn btn-ghost btn-sm" onclick="go('stock')">📦</button>
+      <button class="btn btn-ghost btn-sm" onclick="openDinner()">🍽️</button>
       <button class="btn btn-ghost btn-sm" onclick="go('settings')" data-i18n="settings">⚙️</button>
       <button class="btn btn-ghost btn-sm" onclick="doLogout()" data-i18n="logout">Log out</button>
     </div>
@@ -162,6 +163,7 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
     <div class="nav-right">
       <span id="prepUserName" style="font-size:13px;font-weight:600;color:var(--dim)"></span>
       <button class="btn btn-ghost btn-sm" onclick="go('stock')">📦</button>
+      <button class="btn btn-ghost btn-sm" onclick="openDinner()">🍽️</button>
       <button class="btn btn-ghost btn-sm" onclick="doLogout()" data-i18n="logout">Log out</button>
     </div>
   </nav>
@@ -206,6 +208,17 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
   </nav>
   <div class="wrap" style="margin-top:20px">
     <div id="dropoffDetail"></div>
+  </div>
+</div>
+
+<!-- DINNER / STAFF CONSUMPTION (added 2026-07-30) -->
+<div class="page" id="dinner">
+  <nav class="nav">
+    <div class="nav-logo"><button class="btn btn-ghost btn-sm" onclick="go(DINNER_BACK)">← Back</button></div>
+    <div class="nav-right"><span style="font-weight:800;color:var(--sea-deep)">🍽️ Dinner</span></div>
+  </nav>
+  <div class="wrap" style="margin-top:20px">
+    <div id="dinnerForm"></div>
   </div>
 </div>
 

@@ -2,6 +2,7 @@ const express = require('express');
 const pool    = require('../db/pool');
 const { requireAuth, requireOwner } = require('./auth');
 const { hasValidApiKey } = require('./apiAuth');
+const { adjustInventory } = require('./inventory');
 const router  = express.Router();
 
 // Accepts either a valid PREPTRACKER_API_KEY header (for the bot's automated
@@ -65,6 +66,16 @@ router.post('/', requireOwnerOrApiKey, async (req, res) => {
        protein_price_fl != null ? Number(protein_price_fl) : null,
        unit_count != null ? parseInt(unit_count, 10) : null]
     );
+    // Business protein purchases auto-feed the persistent raw inventory (Phase 1,
+    // added 2026-07-30) -- going forward only, no retroactive backfill of past
+    // purchases (owner's explicit call). Personal-scope purchases never touch stock --
+    // a personal steak dinner isn't truck inventory.
+    const p = rows[0];
+    if (p.scope !== 'personal' && p.protein_type && (p.weight_kg != null || p.unit_count != null)) {
+      const amount = p.unit_count != null ? Number(p.unit_count) : Number(p.weight_kg);
+      const unit = p.unit_count != null ? 'piece' : 'kg';
+      adjustInventory(p.protein_type, 'protein', unit, amount, 0).catch(e => console.error('adjustInventory (purchase) error:', e.message));
+    }
     res.status(201).json({ purchase: rows[0] });
   } catch (e) {
     console.error('purchase create error:', e.message);

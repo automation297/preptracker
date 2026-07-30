@@ -25,6 +25,10 @@ CREATE TABLE IF NOT EXISTS dropoff_proteins (
   status       TEXT NOT NULL DEFAULT 'in_progress' CHECK (status IN ('in_progress','ready')),
   created_at   TIMESTAMPTZ DEFAULT NOW()
 );
+-- Piece-portioned proteins (hotdogs) track a unit count instead of weight -- weight_kg
+-- is no longer always required (application code enforces "weight_kg OR unit_count").
+ALTER TABLE dropoff_proteins ALTER COLUMN weight_kg DROP NOT NULL;
+ALTER TABLE dropoff_proteins ADD COLUMN IF NOT EXISTS unit_count INTEGER;
 
 CREATE TABLE IF NOT EXISTS protein_logs (
   id                  SERIAL PRIMARY KEY,
@@ -66,6 +70,37 @@ ALTER TABLE purchases ADD COLUMN IF NOT EXISTS protein_price_fl NUMERIC(8,2);
 -- Individual piece count for unit-portioned proteins (hotdogs) -- these portion by
 -- piece count, not oz weight, so weight_kg doesn't drive their prep math.
 ALTER TABLE purchases ADD COLUMN IF NOT EXISTS unit_count INTEGER;
+
+-- Persistent running inventory (added 2026-07-30) -- everything above (shift_stock
+-- below, dropoff_proteins above) is workflow/per-night state that resets; this is the
+-- one number per item that survives across nights. raw_qty = bought but not yet
+-- prepped; ready_qty = prepped and sellable. item_name is the bot's protein_type key
+-- ('steak','chicken','burger','hotdog','chorizo','salchi') or a future drink key, NOT
+-- the human-readable dropoff_proteins.protein_name label (see index.js's
+-- PROTEIN_DROPOFF_NAME map for that translation).
+CREATE TABLE IF NOT EXISTS inventory_items (
+  id         SERIAL PRIMARY KEY,
+  item_name  TEXT NOT NULL UNIQUE,
+  category   TEXT NOT NULL DEFAULT 'protein',
+  unit       TEXT NOT NULL DEFAULT 'kg',
+  raw_qty    NUMERIC(10,2) NOT NULL DEFAULT 0,
+  ready_qty  NUMERIC(10,2) NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Staff-meal / other consumption against ready inventory -- the "Dinner" button. Kept
+-- separate from customer sales (which don't touch this table in Phase 1 -- see
+-- CLAUDE.md, sales-matching is explicitly Phase 2) so staff meals never get confused
+-- with what's actually available to sell.
+CREATE TABLE IF NOT EXISTS inventory_consumption (
+  id         SERIAL PRIMARY KEY,
+  item_name  TEXT NOT NULL,
+  qty        NUMERIC(10,2) NOT NULL,
+  reason     TEXT NOT NULL DEFAULT 'dinner',
+  staff_name TEXT,
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 -- Nightly shift sessions
 CREATE TABLE IF NOT EXISTS shift_sessions (

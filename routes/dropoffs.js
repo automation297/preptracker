@@ -1,30 +1,43 @@
 const express = require('express');
 const pool    = require('../db/pool');
 const { requireAuth, requireOwner } = require('./auth');
+const { hasValidApiKey } = require('./apiAuth');
 const router  = express.Router();
 
-const VALID_PROTEINS = ['Flank Steak','Chicken Breast','Chicken Wings','Chicharron / Pork Belly','Burger Meat / Carni Mula','Bacon'];
+const VALID_PROTEINS = ['Flank Steak','Chicken Breast','Chicken Wings','Chicharron / Pork Belly','Burger Meat / Carni Mula','Bacon','Hotdog','Chorizo','Salchi'];
 
-// POST /api/dropoffs — create a new drop-off (owner only)
-router.post('/', requireAuth, requireOwner, async (req, res) => {
+// Accepts either a valid PREPTRACKER_API_KEY (the bot, auto-creating a drop-off from a
+// purchase's prep recommendation) or the existing owner-session auth (the app's own
+// "New Drop-off" UI) -- same pattern as requireOwnerOrApiKey in routes/purchases.js.
+function requireOwnerOrApiKey(req, res, next) {
+  if (hasValidApiKey(req)) return next();
+  if (!req.session.userId) return res.status(401).json({ error: 'Please log in.' });
+  if (req.session.role !== 'owner') return res.status(403).json({ error: 'Owner only.' });
+  next();
+}
+
+// POST /api/dropoffs — create a new drop-off (owner, or the bot via API key)
+router.post('/', requireOwnerOrApiKey, async (req, res) => {
   const { notes, proteins = [], supplies = [] } = req.body;
   if (!proteins.length) return res.status(400).json({ error: 'Add at least one protein.' });
   for (const p of proteins) {
     if (!VALID_PROTEINS.includes(p.protein_name)) return res.status(400).json({ error: `Unknown protein: ${p.protein_name}` });
-    if (!p.weight_kg || Number(p.weight_kg) <= 0) return res.status(400).json({ error: 'Weight must be greater than 0.' });
+    const hasWeight = p.weight_kg && Number(p.weight_kg) > 0;
+    const hasUnits = p.unit_count && Number(p.unit_count) > 0;
+    if (!hasWeight && !hasUnits) return res.status(400).json({ error: 'Weight or unit count must be greater than 0.' });
   }
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const dr = await client.query(
       'INSERT INTO dropoffs (created_by, notes) VALUES ($1,$2) RETURNING id, dropped_at',
-      [req.session.userId, notes || null]
+      [(req.session && req.session.userId) || null, notes || null]
     );
     const dropoffId = dr.rows[0].id;
     for (const p of proteins) {
       await client.query(
-        'INSERT INTO dropoff_proteins (dropoff_id, protein_name, weight_kg) VALUES ($1,$2,$3)',
-        [dropoffId, p.protein_name, Number(p.weight_kg).toFixed(1)]
+        'INSERT INTO dropoff_proteins (dropoff_id, protein_name, weight_kg, unit_count) VALUES ($1,$2,$3,$4)',
+        [dropoffId, p.protein_name, p.weight_kg ? Number(p.weight_kg).toFixed(1) : null, p.unit_count ? Number(p.unit_count) : null]
       );
     }
     for (const s of supplies) {
@@ -54,11 +67,11 @@ router.post('/', requireAuth, requireOwner, async (req, res) => {
 router.get('/', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT d.id, d.dropped_at, d.status, d.picked_up_at, u.name AS dropped_by,
+      `SELECT d.id, d.dropped_at, d.status, d.picked_up_at, COALESCE(u.name, 'Mucho On Bot') AS dropped_by,
               COUNT(dp.id) AS protein_count,
               SUM(CASE WHEN dp.status='ready' THEN 1 ELSE 0 END) AS ready_count
        FROM dropoffs d
-       JOIN users u ON u.id = d.created_by
+       LEFT JOIN users u ON u.id = d.created_by
        LEFT JOIN dropoff_proteins dp ON dp.dropoff_id = d.id
        GROUP BY d.id, d.dropped_at, d.status, d.picked_up_at, u.name
        ORDER BY d.dropped_at DESC`
@@ -73,7 +86,7 @@ router.get('/', requireAuth, async (req, res) => {
 // GET /api/dropoffs/:id — single drop-off with proteins and supplies
 router.get('/:id', requireAuth, async (req, res) => {
   try {
-    const dr = await pool.query('SELECT d.*, u.name AS dropped_by FROM dropoffs d JOIN users u ON u.id=d.created_by WHERE d.id=$1', [req.params.id]);
+    const dr = await pool.query('SELECT d.*, COALESCE(u.name, \'Mucho On Bot\') AS dropped_by FROM dropoffs d LEFT JOIN users u ON u.id=d.created_by WHERE d.id=$1', [req.params.id]);
     if (!dr.rows.length) return res.status(404).json({ error: 'Drop-off not found.' });
     const proteins = await pool.query(
       `SELECT dp.*,

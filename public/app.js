@@ -215,12 +215,13 @@ function renderOwnerInventory(inv) {
 }
 
 function proteinRowHtml(p) {
-  const kg = parseFloat(p.latest_kg_done);
-  const total = parseFloat(p.weight_kg);
+  const amountDisplay = p.unit_count != null
+    ? `${Number(p.unit_count)} pieces`
+    : `${fmtKg(parseFloat(p.latest_kg_done))} ${t('of')} ${fmtKg(parseFloat(p.weight_kg))}`;
   return `<div class="protein-row">
     <div>
       <div class="protein-name">${esc(p.protein_name)}</div>
-      <div class="protein-weight">${fmtKg(kg)} ${t('of')} ${fmtKg(total)}</div>
+      <div class="protein-weight">${amountDisplay}</div>
       ${p.latest_note ? `<div class="protein-note">"${esc(p.latest_note)}"</div>` : ''}
     </div>
     ${statusBadge(p.status)}
@@ -268,7 +269,7 @@ async function openDropoff(id) {
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
           <div>
             <div class="protein-name">${esc(p.protein_name)}</div>
-            <div class="protein-weight">${fmtKg(p.latest_kg_done)} ${t('of')} ${fmtKg(p.weight_kg)}</div>
+            <div class="protein-weight">${p.unit_count != null ? Number(p.unit_count) + ' pieces' : fmtKg(p.latest_kg_done) + ' ' + t('of') + ' ' + fmtKg(p.weight_kg)}</div>
             ${p.latest_note ? `<div class="protein-note">"${esc(p.latest_note)}"</div>` : ''}
           </div>
           ${statusBadge(p.status)}
@@ -388,6 +389,21 @@ async function loadPrepHome() {
     }
     let html = '';
     inv.proteins.forEach(p => {
+      // Piece-portioned proteins (hotdogs) have no weight_kg at all -- there's nothing
+      // to log incremental kg progress against, so just show the count + Mark Ready.
+      if (p.unit_count != null) {
+        html += `<div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+            <div>
+              <div class="protein-name">${esc(p.protein_name)}</div>
+              <div class="protein-weight">${Number(p.unit_count)} pieces</div>
+            </div>
+            ${statusBadge(p.status)}
+          </div>
+          ${p.status === 'in_progress' ? `<button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" onclick="markReady(${p.id})">${t('markReady')}</button>` : ''}
+        </div>`;
+        return;
+      }
       const kg = parseFloat(p.latest_kg_done);
       const total = parseFloat(p.weight_kg);
       const pct = total > 0 ? Math.min(100, Math.round((kg / total) * 100)) : 0;
@@ -465,6 +481,49 @@ async function markReady(id) {
 
 function handleLogProgress(el) {
   openLogProgress(Number(el.dataset.pid), el.dataset.pname, Number(el.dataset.pweight));
+}
+
+// ---------- DINNER / STAFF CONSUMPTION (added 2026-07-30) ----------
+// Any staff member (owner or prep) logs what they personally ate against the READY
+// inventory only -- never raw stock, since staff eat finished/prepped food. Kept
+// separate from customer sales (Phase 2, not built yet) so a staff meal never gets
+// mistaken for something sold. Item names shown are the bot's protein_type keys
+// (steak/chicken/burger/hotdog/etc) -- not yet given friendlier display labels.
+let DINNER_BACK = 'prep-home';
+async function openDinner() {
+  DINNER_BACK = CURRENT_USER?.role === 'owner' ? 'owner-home' : 'prep-home';
+  go('dinner');
+  try {
+    const { items } = await api('/inventory/stock');
+    const ready = items.filter(i => Number(i.ready_qty) > 0);
+    $('dinnerForm').innerHTML = `
+      <div class="card">
+        ${ready.length ? `
+        <div class="field">
+          <label>What did you eat?</label>
+          <select id="dinnerItem">
+            ${ready.map(i => `<option value="${esc(i.item_name)}">${esc(i.item_name)} — ${Number(i.ready_qty).toFixed(1)} ${esc(i.unit)} ready</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>How much (${esc(ready[0].unit)})?</label>
+          <input type="number" id="dinnerQty" step="0.1" min="0" placeholder="e.g. 1" style="font-size:20px;font-weight:700">
+        </div>
+        <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:16px;height:52px" onclick="submitDinner()">Log it</button>
+        ` : `<p style="color:var(--dim)">Nothing ready in inventory yet.</p>`}
+      </div>`;
+  } catch(e) { toast(e.message); }
+}
+async function submitDinner() {
+  const itemEl = $('dinnerItem');
+  if (!itemEl) return;
+  const qty = parseFloat($('dinnerQty').value);
+  if (isNaN(qty) || qty <= 0) { toast('Enter a valid amount.'); return; }
+  try {
+    await api('/inventory/consume', { method: 'POST', body: JSON.stringify({ item_name: itemEl.value, qty, reason: 'dinner' }) });
+    toast('Logged!');
+    go(DINNER_BACK);
+  } catch(e) { toast(e.message); }
 }
 
 // ---------- PREP: history ----------
