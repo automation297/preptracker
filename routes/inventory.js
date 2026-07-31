@@ -58,15 +58,17 @@ router.get('/stock', requireAuth, async (req, res) => {
 // and by the "Mark Ready" flow's inverse (see routes/proteins.js) to move raw->ready.
 // Upserts the item row if it doesn't exist yet (first time this item is ever seen).
 async function adjustInventory(itemName, category, unit, rawDelta, readyDelta) {
-  await pool.query(
+  const { rows } = await pool.query(
     `INSERT INTO inventory_items (item_name, category, unit, raw_qty, ready_qty)
      VALUES ($1,$2,$3,GREATEST(0,$4),GREATEST(0,$5))
      ON CONFLICT (item_name) DO UPDATE SET
        raw_qty = GREATEST(0, inventory_items.raw_qty + $4),
        ready_qty = GREATEST(0, inventory_items.ready_qty + $5),
-       updated_at = NOW()`,
+       updated_at = NOW()
+     RETURNING *`,
     [itemName, category, unit, rawDelta, readyDelta]
   );
+  return rows[0];
 }
 
 // POST /api/inventory/consume {item_name, qty, staff_name, reason} — the "Dinner"
@@ -83,12 +85,15 @@ router.post('/consume', requireAuthOrApiKey, async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM inventory_items WHERE item_name=$1', [itemName]);
     if (!rows.length) return res.status(404).json({ error: 'Unknown inventory item: ' + itemName });
-    await adjustInventory(itemName, rows[0].category, rows[0].unit, 0, -qty);
+    const updated = await adjustInventory(itemName, rows[0].category, rows[0].unit, 0, -qty);
     await pool.query(
       'INSERT INTO inventory_consumption (item_name, qty, reason, staff_name, created_by) VALUES ($1,$2,$3,$4,$5)',
       [itemName, qty, reason, staffName, createdBy]
     );
-    res.json({ ok: true });
+    // ready_qty in the response lets the bot check for low stock right after a sale
+    // decrement without a separate round-trip (see decrementInventoryForSale/
+    // checkLowStock in index.js).
+    res.json({ ok: true, ready_qty: Number(updated.ready_qty) });
   } catch (e) {
     console.error('inventory consume error:', e.message);
     res.status(500).json({ error: 'Could not log consumption.' });

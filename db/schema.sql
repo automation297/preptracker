@@ -70,6 +70,11 @@ ALTER TABLE purchases ADD COLUMN IF NOT EXISTS protein_price_fl NUMERIC(8,2);
 -- Individual piece count for unit-portioned proteins (hotdogs) -- these portion by
 -- piece count, not oz weight, so weight_kg doesn't drive their prep math.
 ALTER TABLE purchases ADD COLUMN IF NOT EXISTS unit_count INTEGER;
+-- Drink purchases (added 2026-07-30) -- soft drinks aren't a protein, don't need
+-- weight/prep at all, and unlike proteins go straight to READY inventory (no raw->ready
+-- prep step -- a canned drink doesn't need "prepping"). unit_count above still holds
+-- the can count for these rows.
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS drink_type TEXT;
 
 -- Persistent running inventory (added 2026-07-30) -- everything above (shift_stock
 -- below, dropoff_proteins above) is workflow/per-night state that resets; this is the

@@ -49,7 +49,7 @@ router.get('/', requireOwnerOrApiKey, async (req, res) => {
 
 // POST /api/purchases — log a purchase (owner, or the bot via API key)
 router.post('/', requireOwnerOrApiKey, async (req, res) => {
-  const { item_name, category, price_fl, qty, unit, notes, bought_at, scope, weight_kg, protein_type, protein_price_fl, unit_count } = req.body;
+  const { item_name, category, price_fl, qty, unit, notes, bought_at, scope, weight_kg, protein_type, protein_price_fl, unit_count, drink_type } = req.body;
   if (!item_name || price_fl == null || qty == null || !unit) {
     return res.status(400).json({ error: 'item_name, price_fl, qty and unit are required.' });
   }
@@ -58,23 +58,31 @@ router.post('/', requireOwnerOrApiKey, async (req, res) => {
   }
   try {
     const { rows } = await pool.query(
-      `INSERT INTO purchases (item_name, category, price_fl, qty, unit, notes, bought_at, created_by, scope, weight_kg, protein_type, protein_price_fl, unit_count)
-       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::date, CURRENT_DATE),$8,COALESCE($9,'business'),$10,$11,$12,$13) RETURNING *`,
+      `INSERT INTO purchases (item_name, category, price_fl, qty, unit, notes, bought_at, created_by, scope, weight_kg, protein_type, protein_price_fl, unit_count, drink_type)
+       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::date, CURRENT_DATE),$8,COALESCE($9,'business'),$10,$11,$12,$13,$14) RETURNING *`,
       [item_name, category || 'other', Number(price_fl), Number(qty), unit,
        notes || null, bought_at || null, (req.session && req.session.userId) || null, scope || null,
        weight_kg != null ? Number(weight_kg) : null, protein_type || null,
        protein_price_fl != null ? Number(protein_price_fl) : null,
-       unit_count != null ? parseInt(unit_count, 10) : null]
+       unit_count != null ? parseInt(unit_count, 10) : null,
+       drink_type || null]
     );
-    // Business protein purchases auto-feed the persistent raw inventory (Phase 1,
-    // added 2026-07-30) -- going forward only, no retroactive backfill of past
-    // purchases (owner's explicit call). Personal-scope purchases never touch stock --
-    // a personal steak dinner isn't truck inventory.
+    // Business protein purchases auto-feed the persistent RAW inventory (Phase 1,
+    // added 2026-07-30) -- raw material that still needs prepping before it's sellable.
+    // Drink purchases (added same day) go STRAIGHT to READY inventory instead -- a
+    // canned drink doesn't need a prep step, it's sellable the moment it arrives.
+    // Both: going forward only, no retroactive backfill of past purchases (owner's
+    // explicit call). Personal-scope purchases never touch stock either way -- a
+    // personal steak dinner (or personal soda) isn't truck inventory.
     const p = rows[0];
-    if (p.scope !== 'personal' && p.protein_type && (p.weight_kg != null || p.unit_count != null)) {
-      const amount = p.unit_count != null ? Number(p.unit_count) : Number(p.weight_kg);
-      const unit = p.unit_count != null ? 'piece' : 'kg';
-      adjustInventory(p.protein_type, 'protein', unit, amount, 0).catch(e => console.error('adjustInventory (purchase) error:', e.message));
+    if (p.scope !== 'personal') {
+      if (p.protein_type && (p.weight_kg != null || p.unit_count != null)) {
+        const amount = p.unit_count != null ? Number(p.unit_count) : Number(p.weight_kg);
+        const unit = p.unit_count != null ? 'piece' : 'kg';
+        adjustInventory(p.protein_type, 'protein', unit, amount, 0).catch(e => console.error('adjustInventory (purchase) error:', e.message));
+      } else if (p.drink_type && p.unit_count != null) {
+        adjustInventory(p.drink_type, 'drink', 'can', 0, Number(p.unit_count)).catch(e => console.error('adjustInventory (drink purchase) error:', e.message));
+      }
     }
     res.status(201).json({ purchase: rows[0] });
   } catch (e) {
