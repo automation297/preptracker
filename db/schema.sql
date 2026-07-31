@@ -75,6 +75,11 @@ ALTER TABLE purchases ADD COLUMN IF NOT EXISTS unit_count INTEGER;
 -- prep step -- a canned drink doesn't need "prepping"). unit_count above still holds
 -- the can count for these rows.
 ALTER TABLE purchases ADD COLUMN IF NOT EXISTS drink_type TEXT;
+-- Tortilla/bread purchases (added 2026-07-31) -- burrito/quesadilla/wrap shells and
+-- burger-bun/sandwich-bread (one shared "bread" bucket, not split by burger vs
+-- sandwich -- owner's call). Same as drinks: no raw->ready prep step, straight to
+-- READY inventory. unit_count above holds the tortilla/bun count for these rows.
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS supply_type TEXT;
 
 -- Persistent running inventory (added 2026-07-30) -- everything above (shift_stock
 -- below, dropoff_proteins above) is workflow/per-night state that resets; this is the

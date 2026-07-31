@@ -176,10 +176,44 @@ async function loadOwnerHome() {
     renderOwnerInventory(inv);
   } catch(e) { $('ownerInventory').innerHTML = `<div class="empty"><h3>${t('noInventory')}</h3></div>`; }
   try {
+    const stock = await api('/inventory/stock');
+    renderOwnerStock(stock.items);
+  } catch(e) {}
+  try {
     const dl = await api('/dropoffs');
     $('ownerRecentList').innerHTML = dl.dropoffs.slice(0,3).map(dropoffCard).join('') ||
       `<div class="empty"><h3>${t('noInventory')}</h3></div>`;
   } catch(e) {}
+}
+
+// Persistent raw/ready stock (inventory_items — survives across nights, distinct from
+// the per-shift dropoff tracking above). Item names are the bot's internal keys
+// (protein_type / drink_type), so map them to friendly labels here — 'color' covers
+// every Cherry/Pineapple/Grape/Orange flavor in one bucket, there's no per-flavor row.
+const STOCK_LABELS = {
+  steak: 'Steak', chicken: 'Chicken', burger: 'Burger', hotdog: 'Hotdog / Salchi Papa',
+  chorizo: 'Chorizo', salchi: 'Salchi',
+  cola: 'Coke', coke_zero: 'Coke Zero', sprite: 'Sprite', sprite_zero: 'Sprite Zero',
+  ice_tea: 'Ice Tea', water: 'Water', color: 'Color (Cherry/Pineapple/Grape/Orange)',
+  tortilla: 'Tortillas', bread: 'Bread (buns + sandwich)'
+};
+function renderOwnerStock(items) {
+  const el = $('ownerStock');
+  if (!el) return;
+  if (!items || !items.length) { el.innerHTML = ''; return; }
+  const fmtQty = (n, unit) => unit === 'kg' ? Number(n).toFixed(1) : String(Math.round(Number(n)));
+  const rows = items.map(i => {
+    const label = STOCK_LABELS[i.item_name] || esc(i.item_name);
+    const unit = i.unit === 'can' ? 'cans' : i.unit === 'piece' ? 'pcs' : i.unit;
+    return `<div class="protein-row">
+      <span class="protein-name">${label}</span>
+      <span class="protein-weight">Raw: ${fmtQty(i.raw_qty, i.unit)} ${unit} · Ready: ${fmtQty(i.ready_qty, i.unit)} ${unit}</span>
+    </div>`;
+  }).join('');
+  el.innerHTML = `<div class="card" style="margin-top:12px">
+    <div style="font-weight:800;margin-bottom:12px">📦 Stock (raw / ready)</div>
+    ${rows}
+  </div>`;
 }
 
 function renderOwnerInventory(inv) {
@@ -501,18 +535,25 @@ async function openDinner() {
         ${ready.length ? `
         <div class="field">
           <label>What did you eat?</label>
-          <select id="dinnerItem">
-            ${ready.map(i => `<option value="${esc(i.item_name)}">${esc(i.item_name)} — ${Number(i.ready_qty).toFixed(1)} ${esc(i.unit)} ready</option>`).join('')}
+          <select id="dinnerItem" onchange="updateDinnerUnit()">
+            ${ready.map(i => `<option value="${esc(i.item_name)}" data-unit="${esc(i.unit)}">${esc(STOCK_LABELS[i.item_name] || i.item_name)} — ${Number(i.ready_qty).toFixed(1)} ${esc(i.unit)} ready</option>`).join('')}
           </select>
         </div>
         <div class="field">
-          <label>How much (${esc(ready[0].unit)})?</label>
+          <label id="dinnerQtyLabel">How much (${esc(ready[0].unit)})?</label>
           <input type="number" id="dinnerQty" step="0.1" min="0" placeholder="e.g. 1" style="font-size:20px;font-weight:700">
         </div>
         <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:16px;height:52px" onclick="submitDinner()">Log it</button>
         ` : `<p style="color:var(--dim)">Nothing ready in inventory yet.</p>`}
       </div>`;
   } catch(e) { toast(e.message); }
+}
+function updateDinnerUnit() {
+  const itemEl = $('dinnerItem');
+  const lbl = $('dinnerQtyLabel');
+  if (!itemEl || !lbl) return;
+  const unit = itemEl.selectedOptions[0]?.dataset.unit || '';
+  lbl.textContent = 'How much (' + unit + ')?';
 }
 async function submitDinner() {
   const itemEl = $('dinnerItem');
