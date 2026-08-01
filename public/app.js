@@ -690,13 +690,13 @@ function calcPlan() {
 
 // ---------- SEASONING + PORTIONS CALCULATOR (combined) ----------
 
-// Bag cut groups — 3 sizes only; 12oz is primary because it halves bag count
-// 12oz covers: Large basket (full bag) · Small / Burger (split in half) · Mix (scoop to order)
-// pct = share of kg going into each bag size
+// Bag cut groups — ONLY 7oz and 9oz, no separate large cut (owner rule, 2026-07-31).
+// 7oz covers: Small basket · Burger · Wraps (Burrito/Quesadilla/Sandwich) · combine
+// 2 for a Large basket/House Special (14oz). 9oz covers: Basket Medium only.
+// pct = share of kg going into each bag size.
 const BAG_CUTS = [
-  { oz: 12, g: 340, pct: 0.58, label: 'Basket Large · split ½ for Small or Burger', color: 'var(--coral)',   primary: true },
-  { oz: 10, g: 283, pct: 0.22, label: 'Basket Medium',                               color: '#FFAA00' },
-  { oz:  8, g: 227, pct: 0.20, label: 'Wraps (Burrito · Quesadilla · Sandwich)',     color: '#e67e22' },
+  { oz: 7, g: 198, pct: 0.78, label: 'Small · Burger · Wraps — combine 2 for a Large/House Special', color: 'var(--coral)', primary: true },
+  { oz: 9, g: 255, pct: 0.22, label: 'Basket Medium',                                                color: '#FFAA00' },
 ];
 
 function calcSeasoning() {
@@ -739,28 +739,25 @@ function calcSeasoning() {
     </div>`;
   });
   const totalBags = BAG_CUTS.reduce((s, cut) => s + Math.floor(grams * cut.pct / cut.g), 0);
-  const savedBags = Math.round(Math.floor(grams * 0.45 / 170) - Math.floor(grams * 0.58 / 340));
   $('portionCutRows').innerHTML = rows.join('') +
     `<div style="margin-top:12px;padding:10px 12px;background:rgba(0,192,127,.1);border-radius:10px;border:1px solid rgba(0,192,127,.3);font-size:12px;color:#007a50;font-weight:700">
-      ✂️ ${totalBags} bags total — ~${savedBags} fewer bags than cutting 6oz individually
+      ✂️ ${totalBags} bags total — remember, 2 combined 7oz bags = 1 Large/House Special
     </div>`;
   $('portionCuts').style.display = 'block';
   $('planNightCard').style.display = 'block';
 }
 
 function calcPlanNight() {
-  const b12 = parseInt($('pPlan12').value) || 0;
-  const b10 = parseInt($('pPlan10').value) || 0;
-  const b8  = parseInt($('pPlan8').value)  || 0;
-  const total = b12 + b10 + b8;
+  const b7 = parseInt($('pPlan7').value) || 0;
+  const b9 = parseInt($('pPlan9').value) || 0;
+  const total = b7 + b9;
   if (!total) { $('planNightResult').style.display = 'none'; return; }
-  const grams = (b12*340) + (b10*283) + (b8*227);
+  const grams = (b7*198) + (b9*255);
   const kg = (grams/1000).toFixed(2);
   $('planNightKg').textContent = kg + ' kg';
   const parts = [];
-  if (b12) parts.push(b12 + ' × 12oz');
-  if (b10) parts.push(b10 + ' × 10oz');
-  if (b8)  parts.push(b8  + ' × 8oz');
+  if (b7) parts.push(b7 + ' × 7oz');
+  if (b9) parts.push(b9 + ' × 9oz');
   $('planNightBreak').textContent = parts.join(' · ') + ' — ' + total + ' bags total';
   $('planNightResult').style.display = 'block';
 }
