@@ -1,5 +1,5 @@
 self.addEventListener('push', e => {
-  let data = { title: 'PrepTracker', body: 'Update available.' };
+  let data = { title: 'Mucho On Prep Station', body: 'Update available.' };
   try { data = e.data.json(); } catch(err) {}
   e.waitUntil(self.registration.showNotification(data.title, {
     body: data.body,

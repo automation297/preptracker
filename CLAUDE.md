@@ -5,6 +5,8 @@ This file tells Claude Code how this project works. Read it before making any ch
 ## What this is
 A Node/Express + Postgres staff-management app for **Mucho On Food Truck** (Aruba): drop-off/prep tracking, persistent raw/ready inventory, staff time-tracking + payroll, a purchase/spend tracker, and a nightly shift-stock countdown. Served as a single-page app (`public/index.html` + `public/app.js`, no framework, no build step).
 
+**On-screen display name vs. codebase name:** staff/owner using the app see it branded as **"Mucho On Prep Station"** (page `<title>`, PIN-screen logo, nav-bar logo, push-notification fallback title — all in `public/index.html`/`public/sw.js`). "PrepTracker" remains the name of the *codebase* everywhere else — repo name, `package.json`, the Postgres db (`preptracker-db`), env vars (`PREPTRACKER_API_KEY`), API paths/headers (`x-preptracker-api-key`), code comments/identifiers, and this doc's own title. Don't conflate the two: when a user-facing string is added or changed, use "Mucho On Prep Station"; internal/engineering references stay "PrepTracker"/"preptracker".
+
 - **Repo:** github.com/automation297/preptracker
 - **Stack:** Node + Express + `pg` (Postgres) + `express-session` (`connect-pg-simple`) + `bcryptjs` + `web-push` + `helmet`, hosted on **Render** (`render.yaml`: one `web` service + one Postgres db, `preptracker-db`, plan `basic-256mb`).
 - **No test suite, no build step, no `engines` field.** `npm start` runs `node index.js` directly.
@@ -53,8 +55,10 @@ Header is exactly `x-preptracker-api-key`, comparison is constant-time and lengt
 | `push.js` | `/api/push` | Subscribe/unsubscribe a logged-in user's browser for web-push. |
 | `staff.js` | `/api/staff` | Add/list/patch payroll `staff` records. API-key only. |
 | `stock.js` | `/api/stock` | Nightly shift-stock: `GET /tonight` (public, `Access-Control-Allow-Origin: *`), open/use/set/close. |
-| `time.js` | `/api/time` | Clock in/out, correction request + approval, hours (weekly/today), timesheet, mark-paid, auto-clockout-all. API-key only. |
+| `time.js` | `/api/time` | Clock in/out, correction request + approval, hours (weekly/today), timesheet, mark-paid, auto-clockout-all, labor-cost (calendar-month total). API-key only. |
 | `apiAuth.js` | *(not mounted)* | `hasValidApiKey`/`requireApiKey` helper, imported by other routers. |
+
+**`GET /api/time/labor-cost?month=YYYY-MM`** (added 2026-08-03, for the bot's combined monthly report): deliberately does NOT reuse `weekBounds`/`hoursForStaff` — those are Mon-Sun week-aligned, and a calendar month rarely lines up with week boundaries, so summing weekly totals would double-count or miss days at the edges. Instead runs its own direct SQL aggregate over `time_entries` filtered to `clock_in` within the given month. Only counts `closed`/`approved` entries (a still-open punch mid-month isn't counted, same as the weekly path's default). If a similar "give me a total for an arbitrary date range" need comes up again, follow this same direct-SQL pattern rather than trying to stitch weekly numbers together.
 
 ## Database — `db/schema.sql` (no migration runner, see below)
 13 tables. `users`/`staff` covered above under Identity model.

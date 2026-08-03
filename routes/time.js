@@ -274,6 +274,40 @@ router.get('/timesheet', requireApiKey, async (req, res) => {
   }
 });
 
+// GET /api/time/labor-cost?month=YYYY-MM — total payroll cost for a calendar month
+// (added 2026-08-03, for the bot's combined monthly sales+spend report). Computed
+// directly from time_entries/staff for the given calendar month -- NOT built from
+// the Mon-Sun weekly timesheet above, since a month rarely aligns to week
+// boundaries and summing partial weeks would double-count or miss days at the
+// edges. Only counts closed/approved entries -- a still-open punch mid-month isn't
+// counted (same as hoursForStaff's default, non-live-counting behavior).
+router.get('/labor-cost', requireApiKey, async (req, res) => {
+  const month = String(req.query.month || '');
+  if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: 'month must be YYYY-MM' });
+  try {
+    const { rows } = await pool.query(
+      `SELECT s.id, s.display_name, s.hourly_rate,
+              COALESCE(SUM(EXTRACT(EPOCH FROM (e.clock_out - e.clock_in)) / 3600), 0) AS hours
+       FROM staff s
+       LEFT JOIN time_entries e ON e.staff_id = s.id AND e.status IN ('closed','approved')
+         AND e.clock_in >= ($1 || '-01')::date AND e.clock_in < (($1 || '-01')::date + INTERVAL '1 month')
+       GROUP BY s.id, s.display_name, s.hourly_rate
+       HAVING COALESCE(SUM(EXTRACT(EPOCH FROM (e.clock_out - e.clock_in)) / 3600), 0) > 0
+       ORDER BY s.display_name`,
+      [month]
+    );
+    const staffRows = rows.map(r => ({
+      name: r.display_name, hours: +Number(r.hours).toFixed(2), rate: Number(r.hourly_rate),
+      pay: +(Number(r.hours) * Number(r.hourly_rate)).toFixed(2)
+    }));
+    const total = +staffRows.reduce((s, r) => s + r.pay, 0).toFixed(2);
+    res.json({ month, staff: staffRows, total });
+  } catch (e) {
+    console.error('labor-cost error:', e.message);
+    res.status(500).json({ error: 'Could not compute labor cost.' });
+  }
+});
+
 // POST /api/time/paid {name} — mark the current week paid
 router.post('/paid', requireApiKey, async (req, res) => {
   const staff = await findStaff(req.body.name);
