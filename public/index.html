@@ -15,7 +15,8 @@
   --shadow-md:0 8px 32px -8px rgba(6,82,96,.22);
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand);color:var(--ink);line-height:1.5;min-height:100vh}
+html,body{overflow-x:hidden}
+body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand);color:var(--ink);line-height:1.5;min-height:100vh;max-width:100vw}
 .page{display:none}.page.active{display:block}
 
 /* NAV */
@@ -65,10 +66,10 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
 .sec-head p{color:var(--dim);font-size:14px;margin-top:2px}
 
 /* PROTEIN ROW */
-.protein-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--line)}
+.protein-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:2px 10px;padding:14px 0;border-bottom:1px solid var(--line)}
 .protein-row:last-child{border-bottom:none}
-.protein-name{font-weight:700;font-size:15px}
-.protein-weight{font-size:13px;color:var(--dim);margin-top:2px}
+.protein-name{font-weight:700;font-size:15px;min-width:0;word-break:break-word}
+.protein-weight{font-size:13px;color:var(--dim);margin-top:2px;min-width:0;text-align:right;flex-shrink:0}
 .protein-note{font-size:12px;color:var(--dim);margin-top:2px;font-style:italic}
 
 /* FORM */
@@ -144,7 +145,7 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--sand)
   </nav>
   <div class="wrap">
     <div class="sec-head" style="margin-top:20px">
-      <div><h2 data-i18n="atFranklins">At Franklin's</h2><p data-i18n="inventorySub">Current inventory</p></div>
+      <div><h2 data-i18n="atPrepStation">At Prep Station</h2><p data-i18n="inventorySub">Current inventory</p></div>
       <button class="btn btn-primary btn-sm" onclick="go('new-dropoff')" data-i18n="newDropoff">+ Drop-off</button>
     </div>
     <div id="ownerInventory"></div>

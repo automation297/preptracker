@@ -8,7 +8,7 @@ const $ = id => document.getElementById(id);
 const T = {
   en: {
     pinTitle:'Enter your PIN', pinSub:'4-digit code', pinWrong:'Wrong PIN. Try again.',
-    atFranklins:"At Franklin's", inventorySub:'Current inventory', newDropoff:'+ Drop-off',
+    atPrepStation:"At Prep Station", inventorySub:'Current inventory', newDropoff:'+ Drop-off',
     history:'History', viewAll:'View all →', toProcess:'To Process', toProcessSub:'Log your progress below',
     saveDropoff:'Save Drop-off', dropoffDetail:'Drop-off Detail', settings:'Settings',
     logout:'Log out', inProgress:'In Progress', ready:'✅ Ready', pickedUp:'📦 Picked up',
@@ -19,7 +19,7 @@ const T = {
   },
   pap: {
     pinTitle:'Pon bo PIN', pinSub:'4 sífra', pinWrong:'PIN robes. Purba di nuevo.',
-    atFranklins:'Na Franklin su kas', inventorySub:'Inventario aktual', newDropoff:'+ Entrega',
+    atPrepStation:'Na Prep Station', inventorySub:'Inventario aktual', newDropoff:'+ Entrega',
     history:'Historial', viewAll:'Mira tur →', toProcess:'Pa Prepará', toProcessSub:'Log bo progreso aki',
     saveDropoff:'Salbá Entrega', dropoffDetail:'Detaye di Entrega', settings:'Konfigurasjon',
     logout:'Sali', inProgress:'Den Progreso', ready:'✅ Listu', pickedUp:'📦 Rekohí',
@@ -32,10 +32,18 @@ const T = {
 
 function t(key){ return T[LANG][key] || T.en[key] || key; }
 
+let ownerHomePoll = null;
 function go(id){
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const pg = $(id); if (pg) pg.classList.add('active');
   window.scrollTo({ top: 0, behavior: 'smooth' });
+  // Owner Home's Stock (raw/ready) numbers only change from sales happening in the
+  // OTHER app (the WhatsApp bot's kitchen/cashier) -- this app has no way to know that
+  // happened without polling. Poll every 15s while this page is actually open, stop the
+  // moment you navigate anywhere else (added 2026-08-04 -- owner reported a drink-can
+  // count that looked frozen/stale rather than reflecting live sales).
+  if (ownerHomePoll) { clearInterval(ownerHomePoll); ownerHomePoll = null; }
+  if (id === 'owner-home') { loadOwnerHome(); ownerHomePoll = setInterval(loadOwnerHome, 15000); }
   if (id === 'new-dropoff') { supplyCount = 0; renderDropoffForm(); }
   if (id === 'dropoff-list') loadDropoffList();
   if (id === 'settings') loadSettings();
@@ -148,7 +156,7 @@ async function afterLogin() {
     if (key && $('vapidKey')) $('vapidKey').dataset.key = key;
     registerPush();
   } catch(e) {}
-  if (CURRENT_USER.role === 'owner') { go('owner-home'); loadOwnerHome(); }
+  if (CURRENT_USER.role === 'owner') { go('owner-home'); }
   else { go('prep-home'); loadPrepHome(); }
 }
 
@@ -327,7 +335,6 @@ async function confirmPickup(id) {
     await api('/dropoffs/' + id + '/pickup', { method: 'POST' });
     toast('Pickup confirmed!');
     go('owner-home');
-    loadOwnerHome();
   } catch(e) { toast(e.message); }
 }
 
@@ -381,7 +388,6 @@ async function submitDropoff() {
     await api('/dropoffs', { method: 'POST', body: JSON.stringify({ proteins, supplies, notes }) });
     toast('Drop-off saved!');
     go('owner-home');
-    loadOwnerHome();
     supplyCount = 0;
   } catch(e) { toast(e.message); }
 }
@@ -730,12 +736,12 @@ function calcSeasoning() {
     const kgUsed = (grams * cut.pct / 1000).toFixed(1);
     const isLast = i === BAG_CUTS.length - 1;
     const tag = cut.primary ? `<span style="background:var(--coral);color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle">RECOMMENDED</span>` : '';
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;${isLast?'':'border-bottom:1px solid var(--line)'}">
-      <div>
+    return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px 10px;padding:14px 0;${isLast?'':'border-bottom:1px solid var(--line)'}">
+      <div style="min-width:0;flex:1 1 180px">
         <div style="font-weight:700;font-size:15px">${cut.oz}oz bags ${tag}</div>
-        <div style="font-size:12px;color:var(--dim);margin-top:3px">${cut.label} · ${kgUsed} kg</div>
+        <div style="font-size:12px;color:var(--dim);margin-top:3px;word-break:break-word">${cut.label} · ${kgUsed} kg</div>
       </div>
-      <div style="font-weight:800;font-size:28px;color:${cut.color};min-width:60px;text-align:right">${count}</div>
+      <div style="font-weight:800;font-size:28px;color:${cut.color};min-width:60px;text-align:right;flex-shrink:0">${count}</div>
     </div>`;
   });
   const totalBags = BAG_CUTS.reduce((s, cut) => s + Math.floor(grams * cut.pct / cut.g), 0);
