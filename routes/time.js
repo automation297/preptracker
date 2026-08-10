@@ -12,6 +12,52 @@ async function findStaff(name) {
   return rows[0] || null;
 }
 
+// POST /api/time/fix-punch {name, field:'in'|'out', time}
+// Directly corrects ONE end of the most recent entry, for the owner's "✏️ Fix time"
+// button on a punch notification. Deliberately not the /correction + /approve pair:
+// that files a pending_approval row and needs a second command, which is wrong when the
+// owner is already looking at the punch and telling us the right time. Applied straight
+// away because only admin numbers can reach it.
+router.post('/fix-punch', requireApiKey, async (req, res) => {
+  try {
+    const staff = await findStaff(req.body.name);
+    if (!staff) return res.status(404).json({ error: 'Unknown staff member: ' + req.body.name });
+    const field = req.body.field === 'out' ? 'out' : 'in';
+    const t = new Date(req.body.time);
+    if (isNaN(t.getTime())) return res.status(400).json({ error: 'Invalid time.' });
+
+    // For an IN fix prefer the entry they are currently inside; otherwise the latest one.
+    const { rows } = await pool.query(
+      `SELECT * FROM time_entries
+        WHERE staff_id=$1 AND clock_in IS NOT NULL AND status IN ('open','closed','approved')
+        ORDER BY (status='open') DESC, clock_in DESC LIMIT 1`,
+      [staff.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'No punch found for ' + staff.display_name + '.' });
+    const entry = rows[0];
+
+    if (field === 'out' && !entry.clock_out && entry.status === 'open') {
+      return res.status(409).json({ error: staff.display_name + ' is still clocked in — there is no clock-out to fix yet.' });
+    }
+    const col = field === 'out' ? 'clock_out' : 'clock_in';
+    const other = field === 'out' ? entry.clock_in : entry.clock_out;
+    if (other) {
+      const a = field === 'out' ? new Date(other) : t;
+      const b = field === 'out' ? t : new Date(other);
+      if (b <= a) return res.status(400).json({ error: 'That would put clock-out before clock-in.' });
+    }
+    const upd = await pool.query(
+      `UPDATE time_entries SET ${col}=$1 WHERE id=$2 RETURNING *`, [t.toISOString(), entry.id]
+    );
+    const e = upd.rows[0];
+    const hours = (e.clock_in && e.clock_out) ? +(((new Date(e.clock_out) - new Date(e.clock_in)) / 3600000).toFixed(2)) : null;
+    res.json({ entry: e, staff, hours, field });
+  } catch (e) {
+    console.error('fix-punch error:', e.message);
+    res.status(500).json({ error: 'Could not fix that punch.' });
+  }
+});
+
 // POST /api/time/set-shift {name, clockIn, clockOut, source?}
 // Writes a COMPLETE closed shift in one call, for the bot's "Nigel 6:30pm-2:45am" command.
 //
