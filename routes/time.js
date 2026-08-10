@@ -12,6 +12,74 @@ async function findStaff(name) {
   return rows[0] || null;
 }
 
+// POST /api/time/set-shift {name, clockIn, clockOut, source?}
+// Writes a COMPLETE closed shift in one call, for the bot's "Nigel 6:30pm-2:45am" command.
+//
+// Why this exists rather than reusing clock-in + clock-out: both of those clamp
+// requestedTime to a 15-minute window (FIFTEEN_MIN_MS) and, outside it, record the CURRENT
+// time and file a pending-approval row instead. That is correct for a live punch but makes
+// it impossible to enter last night's shift after the fact, which is exactly what the
+// owner types this command for.
+//
+// Never inserts a duplicate: if an entry already exists for that staff member on that
+// calendar day — including one they are still clocked into — it is UPDATED in place.
+// Two rows for one night would silently double that person's hours in payroll.
+router.post('/set-shift', requireApiKey, async (req, res) => {
+  const source = req.body.source === 'app' ? 'app' : 'bot';
+  try {
+    const staff = await findStaff(req.body.name);
+    if (!staff) return res.status(404).json({ error: 'Unknown staff member: ' + req.body.name });
+
+    const clockIn = new Date(req.body.clockIn);
+    const clockOut = new Date(req.body.clockOut);
+    if (isNaN(clockIn.getTime()) || isNaN(clockOut.getTime())) {
+      return res.status(400).json({ error: 'clockIn and clockOut must both be valid timestamps.' });
+    }
+    if (clockOut <= clockIn) {
+      return res.status(400).json({ error: 'Clock-out must be after clock-in.' });
+    }
+    const hours = (clockOut - clockIn) / 3600000;
+    if (hours > 24) return res.status(400).json({ error: 'Shift longer than 24 hours — check the times.' });
+
+    // Match on the SERVICE DAY of the clock-in, in Aruba time. A shift starting 6:30 PM
+    // Tuesday and ending 2:45 AM Wednesday belongs to Tuesday.
+    const dayKey = clockIn.toLocaleDateString('en-CA', { timeZone: 'America/Aruba' });
+    const { rows: existing } = await pool.query(
+      `SELECT * FROM time_entries
+        WHERE staff_id=$1
+          AND clock_in IS NOT NULL
+          AND (clock_in AT TIME ZONE 'America/Aruba')::date = $2::date
+          AND status IN ('open','closed','approved')
+        ORDER BY clock_in ASC LIMIT 1`,
+      [staff.id, dayKey]
+    );
+
+    let entry, replaced = null;
+    if (existing.length) {
+      replaced = { clock_in: existing[0].clock_in, clock_out: existing[0].clock_out, status: existing[0].status };
+      const { rows } = await pool.query(
+        `UPDATE time_entries
+            SET clock_in=$1, clock_out=$2, status='closed', source=$3,
+                notes=COALESCE(notes,'') || ' [shift set via bot ' || now()::date || ']'
+          WHERE id=$4 RETURNING *`,
+        [clockIn.toISOString(), clockOut.toISOString(), source, existing[0].id]
+      );
+      entry = rows[0];
+    } else {
+      const { rows } = await pool.query(
+        `INSERT INTO time_entries (staff_id, clock_in, clock_out, source, status, notes)
+         VALUES ($1,$2,$3,$4,'closed','Shift set via bot') RETURNING *`,
+        [staff.id, clockIn.toISOString(), clockOut.toISOString(), source]
+      );
+      entry = rows[0];
+    }
+    res.json({ entry, staff, hours: +hours.toFixed(2), replaced });
+  } catch (e) {
+    console.error('set-shift error:', e.message);
+    res.status(500).json({ error: 'Could not set shift.' });
+  }
+});
+
 // POST /api/time/clock-in {name, source, requestedTime?}
 router.post('/clock-in', requireApiKey, async (req, res) => {
   const source = req.body.source === 'app' ? 'app' : 'bot';
