@@ -45,6 +45,14 @@ router.post('/fix-punch', requireApiKey, async (req, res) => {
       const a = field === 'out' ? new Date(other) : t;
       const b = field === 'out' ? t : new Date(other);
       if (b <= a) return res.status(400).json({ error: 'That would put clock-out before clock-in.' });
+      // Absolute backstop. set-shift already refuses >24h; this route did not, so a
+      // mis-anchored correction could silently write a THIRTY-HOUR shift straight into
+      // payroll (that exact bug existed in the bot's 3am flow). 16h is above any real
+      // shift here — the truck runs roughly 6:30PM to 3AM at the outside.
+      const hrs = (b - a) / 3600000;
+      if (hrs > 16) {
+        return res.status(400).json({ error: 'That makes a ' + hrs.toFixed(1) + '-hour shift — check the date/time. Nothing was changed.' });
+      }
     }
     const upd = await pool.query(
       `UPDATE time_entries SET ${col}=$1 WHERE id=$2 RETURNING *`, [t.toISOString(), entry.id]
