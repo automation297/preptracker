@@ -26,17 +26,43 @@ router.post('/fix-punch', requireApiKey, async (req, res) => {
     const t = new Date(req.body.time);
     if (isNaN(t.getTime())) return res.status(400).json({ error: 'Invalid time.' });
 
-    // For an IN fix prefer the entry they are currently inside; otherwise the latest one.
-    const { rows } = await pool.query(
-      `SELECT * FROM time_entries
-        WHERE staff_id=$1 AND clock_in IS NOT NULL AND status IN ('open','closed','approved')
-        ORDER BY (status='open') DESC, clock_in DESC LIMIT 1`,
-      [staff.id]
-    );
-    if (!rows.length) return res.status(404).json({ error: 'No punch found for ' + staff.display_name + '.' });
+    // Optional `date` (YYYY-MM-DD) targets that SERVICE DAY's entry instead of the most
+    // recent one — needed by the bot's "Delroy Porter 17 august 18:30 in" timesheet command,
+    // which fixes a specific past night rather than the punch that just happened.
+    const day = typeof req.body.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.body.date) ? req.body.date : null;
+    const { rows } = day
+      ? await pool.query(
+          `SELECT * FROM time_entries
+            WHERE staff_id=$1 AND clock_in IS NOT NULL
+              AND (clock_in AT TIME ZONE 'America/Aruba')::date = $2::date
+              AND status IN ('open','closed','approved')
+            ORDER BY clock_in ASC LIMIT 1`,
+          [staff.id, day])
+      : await pool.query(
+          `SELECT * FROM time_entries
+            WHERE staff_id=$1 AND clock_in IS NOT NULL AND status IN ('open','closed','approved')
+            ORDER BY (status='open') DESC, clock_in DESC LIMIT 1`,
+          [staff.id]);
+
+    // Fixing a clock-IN for a day with no record at all creates the entry (still open, so a
+    // matching OUT can be sent straight after). Without this, correcting a night the person
+    // forgot to punch in entirely would be impossible from the bot.
+    if (!rows.length) {
+      if (field === 'in') {
+        const ins = await pool.query(
+          `INSERT INTO time_entries (staff_id, clock_in, source, status, notes)
+           VALUES ($1,$2,'bot','open','Created by timesheet fix') RETURNING *`,
+          [staff.id, t.toISOString()]
+        );
+        return res.json({ entry: ins.rows[0], staff, hours: null, field, created: true });
+      }
+      return res.status(404).json({ error: 'No punch found for ' + staff.display_name + (day ? ' on ' + day : '') + '. Set the clock-IN first.' });
+    }
     const entry = rows[0];
 
-    if (field === 'out' && !entry.clock_out && entry.status === 'open') {
+    // Only refuse when NO date was given: with an explicit date the whole point is to close
+    // out a night the person forgot to punch out of.
+    if (!day && field === 'out' && !entry.clock_out && entry.status === 'open') {
       return res.status(409).json({ error: staff.display_name + ' is still clocked in — there is no clock-out to fix yet.' });
     }
     const col = field === 'out' ? 'clock_out' : 'clock_in';
@@ -54,9 +80,11 @@ router.post('/fix-punch', requireApiKey, async (req, res) => {
         return res.status(400).json({ error: 'That makes a ' + hrs.toFixed(1) + '-hour shift — check the date/time. Nothing was changed.' });
       }
     }
-    const upd = await pool.query(
-      `UPDATE time_entries SET ${col}=$1 WHERE id=$2 RETURNING *`, [t.toISOString(), entry.id]
-    );
+    // Setting a clock-out also closes the entry — otherwise a fixed shift stays 'open' and
+    // the one-open-punch-per-staff index blocks their next real clock-in.
+    const upd = field === 'out'
+      ? await pool.query(`UPDATE time_entries SET clock_out=$1, status='closed' WHERE id=$2 RETURNING *`, [t.toISOString(), entry.id])
+      : await pool.query(`UPDATE time_entries SET clock_in=$1 WHERE id=$2 RETURNING *`, [t.toISOString(), entry.id]);
     const e = upd.rows[0];
     const hours = (e.clock_in && e.clock_out) ? +(((new Date(e.clock_out) - new Date(e.clock_in)) / 3600000).toFixed(2)) : null;
     res.json({ entry: e, staff, hours, field });
