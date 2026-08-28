@@ -49,7 +49,7 @@ router.get('/', requireOwnerOrApiKey, async (req, res) => {
 
 // POST /api/purchases — log a purchase (owner, or the bot via API key)
 router.post('/', requireOwnerOrApiKey, async (req, res) => {
-  const { item_name, category, price_fl, qty, unit, notes, bought_at, scope, weight_kg, protein_type, protein_price_fl, unit_count, drink_type, supply_type, cheese_price_fl, fries_price_fl, tortilla_price_fl, bun_price_fl } = req.body;
+  const { item_name, category, price_fl, qty, unit, notes, bought_at, scope, weight_kg, protein_type, protein_price_fl, unit_count, drink_type, supply_type, cheese_price_fl, fries_price_fl, tortilla_price_fl, bun_price_fl, oil_price_fl, sauce_price_fl, veg_price_fl, bacon_price_fl, packaging_price_fl, drink_price_fl } = req.body;
   if (!item_name || price_fl == null || qty == null || !unit) {
     return res.status(400).json({ error: 'item_name, price_fl, qty and unit are required.' });
   }
@@ -58,8 +58,8 @@ router.post('/', requireOwnerOrApiKey, async (req, res) => {
   }
   try {
     const { rows } = await pool.query(
-      `INSERT INTO purchases (item_name, category, price_fl, qty, unit, notes, bought_at, created_by, scope, weight_kg, protein_type, protein_price_fl, unit_count, drink_type, supply_type, cheese_price_fl, fries_price_fl, tortilla_price_fl, bun_price_fl)
-       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::date, CURRENT_DATE),$8,COALESCE($9,'business'),$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
+      `INSERT INTO purchases (item_name, category, price_fl, qty, unit, notes, bought_at, created_by, scope, weight_kg, protein_type, protein_price_fl, unit_count, drink_type, supply_type, cheese_price_fl, fries_price_fl, tortilla_price_fl, bun_price_fl, oil_price_fl, sauce_price_fl, veg_price_fl, bacon_price_fl, packaging_price_fl, drink_price_fl)
+       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::date, CURRENT_DATE),$8,COALESCE($9,'business'),$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25) RETURNING *`,
       [item_name, category || 'other', Number(price_fl), Number(qty), unit,
        notes || null, bought_at || null, (req.session && req.session.userId) || null, scope || null,
        weight_kg != null ? Number(weight_kg) : null, protein_type || null,
@@ -69,7 +69,13 @@ router.post('/', requireOwnerOrApiKey, async (req, res) => {
        cheese_price_fl   != null ? Number(cheese_price_fl)   : null,
        fries_price_fl    != null ? Number(fries_price_fl)    : null,
        tortilla_price_fl != null ? Number(tortilla_price_fl) : null,
-       bun_price_fl      != null ? Number(bun_price_fl)      : null]
+       bun_price_fl      != null ? Number(bun_price_fl)      : null,
+       oil_price_fl      != null ? Number(oil_price_fl) : null,
+       sauce_price_fl    != null ? Number(sauce_price_fl) : null,
+       veg_price_fl      != null ? Number(veg_price_fl) : null,
+       bacon_price_fl    != null ? Number(bacon_price_fl) : null,
+       packaging_price_fl!= null ? Number(packaging_price_fl) : null,
+       drink_price_fl    != null ? Number(drink_price_fl) : null]
     );
     // Business protein purchases auto-feed the persistent RAW inventory (Phase 1,
     // added 2026-07-30) -- raw material that still needs prepping before it's sellable.

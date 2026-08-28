@@ -76,6 +76,16 @@ ALTER TABLE purchases ADD COLUMN IF NOT EXISTS cheese_price_fl NUMERIC(8,2);
 ALTER TABLE purchases ADD COLUMN IF NOT EXISTS fries_price_fl NUMERIC(8,2);
 ALTER TABLE purchases ADD COLUMN IF NOT EXISTS tortilla_price_fl NUMERIC(8,2);
 ALTER TABLE purchases ADD COLUMN IF NOT EXISTS bun_price_fl NUMERIC(8,2);
+-- The rest of what actually goes into a plate, taken from real receipts: frying oil
+-- ("Liquid Shortening"), sauce base ("Mayonnaise HD 4/1GL", "Ketjap Manis"), salad veg
+-- (lettuce, tomato, onion), bacon, and packaging (boxes, clamshells, forks, wrapping).
+-- Same rule as the four above: that line's own price, or null.
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS oil_price_fl NUMERIC(8,2);
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS sauce_price_fl NUMERIC(8,2);
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS veg_price_fl NUMERIC(8,2);
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS bacon_price_fl NUMERIC(8,2);
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS packaging_price_fl NUMERIC(8,2);
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS drink_price_fl NUMERIC(8,2);
 -- Individual piece count for unit-portioned proteins (hotdogs) -- these portion by
 -- piece count, not oz weight, so weight_kg doesn't drive their prep math.
 ALTER TABLE purchases ADD COLUMN IF NOT EXISTS unit_count INTEGER;

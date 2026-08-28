@@ -81,6 +81,28 @@ app.use('/api/inventory', require('./routes/inventory'));
 app.use('/api/push',      require('./routes/push'));
 app.use('/api/purchases', require('./routes/purchases'));
 app.use('/api/stock',     require('./routes/stock'));
+// ── SCHEMA MIGRATION (one call, safe to repeat) ──────────────────────────────
+// db/schema.sql is entirely CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS, so
+// running it again is a no-op on anything that already exists. Until now it had to be
+// applied BY HAND via psql, and CLAUDE.md documents the consequence: a column added to
+// schema.sql but never applied makes the matching route throw "column does not exist" at
+// insert time, with no warning until someone tries to use it. This removes that step.
+// API-key guarded — same secret the bot uses, never a public endpoint.
+app.post('/api/migrate', require('./routes/apiAuth').requireApiKey, async (req, res) => {
+  try {
+    const fs = require('fs'), path = require('path');
+    const sql = fs.readFileSync(path.join(__dirname, 'db', 'schema.sql'), 'utf8');
+    await require('./db/pool').query(sql);
+    const { rows } = await require('./db/pool').query(
+      "SELECT column_name FROM information_schema.columns WHERE table_name='purchases' ORDER BY ordinal_position"
+    );
+    res.json({ ok: true, ranAt: new Date().toISOString(), purchasesColumns: rows.map(r => r.column_name) });
+  } catch (e) {
+    console.error('migrate error:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 app.use('/api/staff',     require('./routes/staff'));
 app.use('/api/time',      require('./routes/time'));
 
