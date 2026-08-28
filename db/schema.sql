@@ -67,6 +67,15 @@ ALTER TABLE purchases ADD COLUMN IF NOT EXISTS protein_type TEXT;
 -- total). A bundled multi-item receipt's total is not the protein's own cost — see
 -- CLAUDE.md "protein_price_fl" note for the real bug this fixes.
 ALTER TABLE purchases ADD COLUMN IF NOT EXISTS protein_price_fl NUMERIC(8,2);
+-- Line-item costs isolated from a MIXED receipt, same idea as protein_price_fl above.
+-- Cheese, fries, tortillas and buns go into nearly every plate, but always arrive bundled
+-- into one combined supermarket total — so the real cost per plate could only ever be
+-- estimated from month totals. Each is the price of THAT line alone, null when it cannot
+-- be read separately (never a share of the total — see the protein_price_fl bug note).
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS cheese_price_fl NUMERIC(8,2);
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS fries_price_fl NUMERIC(8,2);
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS tortilla_price_fl NUMERIC(8,2);
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS bun_price_fl NUMERIC(8,2);
 -- Individual piece count for unit-portioned proteins (hotdogs) -- these portion by
 -- piece count, not oz weight, so weight_kg doesn't drive their prep math.
 ALTER TABLE purchases ADD COLUMN IF NOT EXISTS unit_count INTEGER;
