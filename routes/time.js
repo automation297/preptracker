@@ -330,20 +330,32 @@ router.post('/approve', requireApiKey, async (req, res) => {
   }
 });
 
-// Monday-Sunday week containing `ref` (defaults to now), in UTC (simple, documented
-// limitation: week boundaries are computed in UTC, not Aruba local time — acceptable
-// since punches themselves are timestamped correctly and this only affects which
-// week a punch made in the first/last few hours of a boundary day is bucketed into).
+// Monday-Sunday week containing `ref`, in ARUBA time (fixed -04:00, no DST).
+//
+// This used to be computed in UTC and was documented as an acceptable limitation. It was
+// not: the week ended Sunday 23:59 UTC, which is Sunday 19:59 in Aruba, and the truck's
+// shift starts at 18:30. So a Sunday punch clocked in at 20:00 Aruba or later fell into
+// the FOLLOWING week — on Monday the owner reviewed a week with Sunday night missing
+// (owner-reported 2026-09-22). A night business cannot have its week end mid-shift.
 function weekBounds(ref = new Date()) {
-  const day = ref.getUTCDay(); // 0=Sun..6=Sat
-  const diffToMonday = (day + 6) % 7;
-  const monday = new Date(Date.UTC(ref.getUTCFullYear(), ref.getUTCMonth(), ref.getUTCDate() - diffToMonday, 0, 0, 0));
-  const sunday = new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate() + 6, 23, 59, 59, 999));
+  // Which Aruba calendar day does `ref` fall on?
+  const aruba = new Date(ref.toLocaleString('en-US', { timeZone: 'America/Aruba' }));
+  const diffToMonday = (aruba.getDay() + 6) % 7;   // 0=Sun..6=Sat → Monday-first
+  const y = aruba.getFullYear(), m = aruba.getMonth(), d = aruba.getDate();
+  // Aruba midnight is 04:00 UTC the same day.
+  const monday = new Date(Date.UTC(y, m, d - diffToMonday, 4, 0, 0));
+  const sunday = new Date(Date.UTC(y, m, d - diffToMonday + 7, 3, 59, 59, 999));
   return { monday, sunday };
 }
 
+// NOTE on `open` entries: a punch with no clock-out is NEVER counted in totalHours — there
+// is no end time to count to. But it must still be SEEN. It used to be excluded from the
+// query entirely, so a shift someone forgot to close vanished from both the weekly view and
+// the owner's Monday timesheet with nothing to show it had ever existed (owner-reported
+// 2026-09-22: "he punched in a few days and they did not pop up"). Open entries now always
+// come back in `entries`, and `openCount` says how many need fixing.
 async function hoursForStaff(staffId, monday, sunday, { includeOpen = false } = {}) {
-  const statuses = includeOpen ? "'closed','approved','open'" : "'closed','approved'";
+  const statuses = "'closed','approved','open'";
   const { rows } = await pool.query(
     `SELECT * FROM time_entries
      WHERE staff_id=$1 AND status IN (${statuses})
@@ -352,6 +364,7 @@ async function hoursForStaff(staffId, monday, sunday, { includeOpen = false } = 
     [staffId, monday.toISOString(), sunday.toISOString()]
   );
   const now = new Date();
+  const openCount = rows.filter(r => r.status === 'open').length;
   const totalHours = rows.reduce((sum, r) => {
     // An 'open' entry has no clock_out yet — count it up to right now instead
     // of skipping it, so "hours so far" reflects a still-running punch live.
@@ -359,7 +372,7 @@ async function hoursForStaff(staffId, monday, sunday, { includeOpen = false } = 
     if (!clockOutTime) return sum;
     return sum + (clockOutTime - new Date(r.clock_in)) / 3600000;
   }, 0);
-  return { entries: rows, totalHours: +totalHours.toFixed(2) };
+  return { entries: rows, totalHours: +totalHours.toFixed(2), openCount };
 }
 
 // Aruba has no DST — a fixed -04:00 offset day boundary, same convention the
@@ -415,8 +428,8 @@ router.get('/timesheet', requireApiKey, async (req, res) => {
     const staffRes = await pool.query('SELECT * FROM staff WHERE active=true ORDER BY display_name');
     const rows = [];
     for (const s of staffRes.rows) {
-      const { totalHours } = await hoursForStaff(s.id, monday, sunday);
-      rows.push({ staff: s, hours: totalHours, pay: +(totalHours * s.hourly_rate).toFixed(2) });
+      const { totalHours, openCount } = await hoursForStaff(s.id, monday, sunday);
+      rows.push({ staff: s, hours: totalHours, pay: +(totalHours * s.hourly_rate).toFixed(2), openCount });
     }
     res.json({ weekStart: monday.toISOString().slice(0, 10), weekEnd: sunday.toISOString().slice(0, 10), rows });
   } catch (e) {
@@ -474,6 +487,24 @@ router.post('/paid', requireApiKey, async (req, res) => {
     res.json({ ok: true, staff, weekStart: monday.toISOString().slice(0, 10) });
   } catch (e) {
     res.status(500).json({ error: 'Could not mark as paid.' });
+  }
+});
+
+// GET /api/time/open — every punch still open, oldest first. There was no way to ask this
+// question: an open entry is invisible in every other view, so a punch that never closed
+// could sit there for weeks and only surface as "my hours are wrong" at payroll.
+router.get('/open', requireApiKey, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT e.*, s.display_name FROM time_entries e
+       JOIN staff s ON s.id = e.staff_id
+       WHERE e.status='open' ORDER BY e.clock_in`);
+    res.json({ open: rows.map(r => ({
+      id: r.id, name: r.display_name, clock_in: r.clock_in,
+      hoursOpen: +((Date.now() - new Date(r.clock_in)) / 3600000).toFixed(1)
+    })) });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load open punches.' });
   }
 });
 
