@@ -6,6 +6,38 @@ const router = express.Router();
 
 const FIFTEEN_MIN_MS = 15 * 60 * 1000;
 
+// ── PAID START (owner, 2026-10-26) ───────────────────────────────────────────────
+// "The pay starts 5 min before the shift, which is 6:30." Clocking in early does NOT
+// start the clock: a punch at 18:11 is paid from 18:25. A punch AFTER 18:25 is paid
+// from the real punch (late is late). Only PAY moves — the stored clock_in is never
+// touched, so the real arrival time stays on record.
+//
+// The floor only applies to a punch within PAY_START_WINDOW_MIN (default 3h) before
+// pay start. Anything earlier is treated as a deliberate early shift (a prep shift,
+// a future lunch service) and paid as punched — otherwise a noon clock-in would be
+// silently paid from 18:25 and lose six hours. Both are env vars so the next shift
+// change is a Render setting, not a code edit.
+//
+// EVERY hours figure that feeds pay must go through paidHours() — weekly view,
+// timesheet, labor-cost and the per-punch replies. One path left on raw
+// clock_out - clock_in and the Monday report would disagree with the monthly one.
+const PAY_START_TIME = /^\d{1,2}:\d{2}$/.test(process.env.PAY_START_TIME || '') ? process.env.PAY_START_TIME : '18:25';
+const PAY_START_WINDOW_MS = (Number(process.env.PAY_START_WINDOW_MIN) > 0 ? Number(process.env.PAY_START_WINDOW_MIN) : 180) * 60 * 1000;
+
+function paidStart(clockIn) {
+  const ci = new Date(clockIn);
+  const day = ci.toLocaleDateString('en-CA', { timeZone: 'America/Aruba' });  // Aruba calendar day of the punch
+  const [h, m] = PAY_START_TIME.split(':');
+  const start = new Date(`${day}T${h.padStart(2, '0')}:${m}:00-04:00`);       // Aruba: fixed -04:00, no DST
+  return (ci < start && start - ci <= PAY_START_WINDOW_MS) ? start : ci;
+}
+
+// Paid hours for one punch, unrounded. 0 if they clocked out before pay even started.
+function paidHours(clockIn, clockOut) {
+  if (!clockIn || !clockOut) return 0;
+  return Math.max(0, (new Date(clockOut) - paidStart(clockIn)) / 3600000);
+}
+
 async function findStaff(name) {
   const key = String(name || '').trim().toLowerCase();
   const { rows } = await pool.query('SELECT * FROM staff WHERE name=$1 AND active=true', [key]);
@@ -86,7 +118,7 @@ router.post('/fix-punch', requireApiKey, async (req, res) => {
       ? await pool.query(`UPDATE time_entries SET clock_out=$1, status='closed' WHERE id=$2 RETURNING *`, [t.toISOString(), entry.id])
       : await pool.query(`UPDATE time_entries SET clock_in=$1 WHERE id=$2 RETURNING *`, [t.toISOString(), entry.id]);
     const e = upd.rows[0];
-    const hours = (e.clock_in && e.clock_out) ? +(((new Date(e.clock_out) - new Date(e.clock_in)) / 3600000).toFixed(2)) : null;
+    const hours = (e.clock_in && e.clock_out) ? +paidHours(e.clock_in, e.clock_out).toFixed(2) : null;
     res.json({ entry: e, staff, hours, field });
   } catch (e) {
     console.error('fix-punch error:', e.message);
@@ -155,7 +187,7 @@ router.post('/set-shift', requireApiKey, async (req, res) => {
       );
       entry = rows[0];
     }
-    res.json({ entry, staff, hours: +hours.toFixed(2), replaced });
+    res.json({ entry, staff, hours: +paidHours(entry.clock_in, entry.clock_out).toFixed(2), replaced });
   } catch (e) {
     console.error('set-shift error:', e.message);
     res.status(500).json({ error: 'Could not set shift.' });
@@ -239,7 +271,7 @@ router.post('/clock-out', requireApiKey, async (req, res) => {
       return res.status(409).json({ error: staff.display_name + ' was already clocked out (possibly by a concurrent request).' });
     }
     const closed = rows[0];
-    const hours = (new Date(closed.clock_out) - new Date(closed.clock_in)) / 3600000;
+    const hours = paidHours(closed.clock_in, closed.clock_out);
 
     let pendingNote = null;
     if (requestedValid && !withinWindow) {
@@ -365,14 +397,18 @@ async function hoursForStaff(staffId, monday, sunday, { includeOpen = false } = 
   );
   const now = new Date();
   const openCount = rows.filter(r => r.status === 'open').length;
-  const totalHours = rows.reduce((sum, r) => {
+  let totalHours = 0;
+  for (const r of rows) {
     // An 'open' entry has no clock_out yet — count it up to right now instead
     // of skipping it, so "hours so far" reflects a still-running punch live.
     const clockOutTime = r.clock_out ? new Date(r.clock_out) : (includeOpen && r.status === 'open' ? now : null);
-    if (!clockOutTime) return sum;
-    return sum + (clockOutTime - new Date(r.clock_in)) / 3600000;
-  }, 0);
-  return { entries: rows, totalHours: +totalHours.toFixed(2), openCount };
+    // paid_from = when pay actually starts for this punch (see PAID START at the top).
+    // The row keeps its real clock_in; only the hours move.
+    r.paid_from = r.clock_in ? paidStart(r.clock_in).toISOString() : null;
+    r.paid_hours = clockOutTime ? +paidHours(r.clock_in, clockOutTime).toFixed(2) : 0;
+    if (clockOutTime) totalHours += paidHours(r.clock_in, clockOutTime);
+  }
+  return { entries: rows, totalHours: +totalHours.toFixed(2), openCount, payStart: PAY_START_TIME };
 }
 
 // Aruba has no DST — a fixed -04:00 offset day boundary, same convention the
@@ -448,20 +484,27 @@ router.get('/labor-cost', requireApiKey, async (req, res) => {
   const month = String(req.query.month || '');
   if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: 'month must be YYYY-MM' });
   try {
+    // Hours are summed in JS, not SQL, so they go through paidHours() — the same
+    // paid-start rule as the weekly timesheet. A SQL EXTRACT(EPOCH ...) here would pay
+    // early clock-ins in the monthly report while the Monday report did not.
     const { rows } = await pool.query(
-      `SELECT s.id, s.display_name, s.hourly_rate,
-              COALESCE(SUM(EXTRACT(EPOCH FROM (e.clock_out - e.clock_in)) / 3600), 0) AS hours
+      `SELECT s.id, s.display_name, s.hourly_rate, e.clock_in, e.clock_out
        FROM staff s
-       LEFT JOIN time_entries e ON e.staff_id = s.id AND e.status IN ('closed','approved')
+       JOIN time_entries e ON e.staff_id = s.id AND e.status IN ('closed','approved')
+         AND e.clock_in IS NOT NULL AND e.clock_out IS NOT NULL
          AND e.clock_in >= ($1 || '-01')::date AND e.clock_in < (($1 || '-01')::date + INTERVAL '1 month')
-       GROUP BY s.id, s.display_name, s.hourly_rate
-       HAVING COALESCE(SUM(EXTRACT(EPOCH FROM (e.clock_out - e.clock_in)) / 3600), 0) > 0
        ORDER BY s.display_name`,
       [month]
     );
-    const staffRows = rows.map(r => ({
-      name: r.display_name, hours: +Number(r.hours).toFixed(2), rate: Number(r.hourly_rate),
-      pay: +(Number(r.hours) * Number(r.hourly_rate)).toFixed(2)
+    const byStaff = new Map();
+    for (const r of rows) {
+      const cur = byStaff.get(r.id) || { name: r.display_name, rate: Number(r.hourly_rate), hours: 0 };
+      cur.hours += paidHours(r.clock_in, r.clock_out);
+      byStaff.set(r.id, cur);
+    }
+    const staffRows = [...byStaff.values()].filter(r => r.hours > 0).map(r => ({
+      name: r.name, hours: +r.hours.toFixed(2), rate: r.rate,
+      pay: +(r.hours * r.rate).toFixed(2)
     }));
     const total = +staffRows.reduce((s, r) => s + r.pay, 0).toFixed(2);
     res.json({ month, staff: staffRows, total });

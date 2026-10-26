@@ -108,3 +108,12 @@ The seasoning/bag-cut calculator (`calcSeasoning`/`BAG_CUTS`/`calcPlanNight`) re
 **New: `GET /api/time/open`** — every punch with no clock-out, with how long it has been open. Nothing could answer that question before, which is why these sat unnoticed until payroll. The bot exposes it as the admin command **`open punches`**.
 
 **Rule of thumb this cost us:** a record that is filtered out of a view is not "missing data", it is a silent lie about the hours someone worked. Filter to change the TOTAL, never to hide the ROW.
+
+## Pay starts at 18:25, not at the punch (owner, 2026-10-26)
+*"The pay starts 5 min before the shift, which is 6:30."* A clock-in before 18:25 Aruba is paid from 18:25; a clock-in after 18:25 is paid from the real punch. **Only pay moves — `clock_in` is never rewritten**, so the real arrival time stays on record.
+
+- `paidStart()` / `paidHours()` at the top of `routes/time.js` are the rule. **Every hours figure that feeds pay goes through `paidHours()`**: `hoursForStaff` (weekly, today, timesheet), `labor-cost` (now summed in JS, not SQL, for exactly this reason), and the replies from `clock-out`, `fix-punch` and `set-shift`. The only raw `clock_out - clock_in` left are the >16h/>24h sanity checks and `/open`'s "hours open" — neither is pay.
+- Entries now carry `paid_from` and `paid_hours`; responses carry `payStart`. The bot shows "18:11 (paid from 18:25)" on the line so the total does not look short.
+- **The floor only applies within 3h before pay start** (`PAY_START_WINDOW_MIN`, default 180). An earlier punch is treated as a deliberate early shift (prep, a future lunch) and paid as punched — otherwise a noon clock-in would silently lose six hours. Change the time with `PAY_START_TIME` (default `18:25`) on Render, not in code.
+- Verified against the week of Oct 19: 42.42h raw → 41.27h paid (AWG 562.45 → 547.20 at 13.26), plus late/exact/noon/past-midnight/out-before-start edges.
+- **Applies to every week the moment it deploys, including weeks already in the system** — re-running `hours last week` for an old week will show the new number.
