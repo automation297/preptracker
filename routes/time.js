@@ -467,7 +467,7 @@ router.get('/hours/:name', requireApiKey, async (req, res) => {
 // Returned as a SEPARATE `owner` field, never inside `rows`: `paid [name]`, labor-cost and
 // anything else that walks `rows` keeps working on punched staff only.
 const OWNER_PAY = {
-  name: process.env.OWNER_PAY_NAME || 'Junior',
+  name: process.env.OWNER_PAY_NAME || 'Delroy',
   base: String(process.env.OWNER_PAY_BASE_STAFF || 'nigel').trim().toLowerCase(),
   rate: Number(process.env.OWNER_PAY_RATE) > 0 ? Number(process.env.OWNER_PAY_RATE) : 15,
   extra: process.env.OWNER_PAY_EXTRA_HOURS && Number(process.env.OWNER_PAY_EXTRA_HOURS) >= 0 ? Number(process.env.OWNER_PAY_EXTRA_HOURS) : 3,

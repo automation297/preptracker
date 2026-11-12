@@ -123,7 +123,7 @@ The seasoning/bag-cut calculator (`calcSeasoning`/`BAG_CUTS`/`calcPlanNight`) re
 
 - Each night Nigel worked → Nigel's **paid** hours that night (through `paidHours()`, so the 18:25 rule applies) + 3. Two punches on one Aruba night are summed into one night.
 - Junior works **6** nights, Nigel 5: the nights Nigel did not work are filled at **Nigel's average night that week** + 3. Nigel worked zero nights → `OWNER_PAY_FALLBACK_HOURS` (7.2 = 36h/5) + 3. Nigel worked more than 6 → Junior gets all of them.
-- Env (Render, all optional): `OWNER_PAY_RATE` 15, `OWNER_PAY_EXTRA_HOURS` 3, `OWNER_PAY_DAYS` 6, `OWNER_PAY_BASE_STAFF` nigel, `OWNER_PAY_FALLBACK_HOURS` 7.2, `OWNER_PAY_NAME` Junior, `OWNER_PAY_ENABLED=false` to switch off.
+- Env (Render, all optional): `OWNER_PAY_RATE` 15, `OWNER_PAY_EXTRA_HOURS` 3, `OWNER_PAY_DAYS` 6, `OWNER_PAY_BASE_STAFF` nigel, `OWNER_PAY_FALLBACK_HOURS` 7.2, `OWNER_PAY_NAME` Delroy (owner asked 2026-11-12 to show Delroy, not Junior), `OWNER_PAY_ENABLED=false` to switch off.
 - A failure here logs and leaves `owner: null` — it can never break the staff timesheet.
 - Verified with a stubbed pool: 5 × 7.2h nights → 61.2h / 918; a short night, Nigel off all week (fallback), 7 nights, and a split night.
 - **Not** in `labor-cost` (the monthly report) yet — only the weekly views show it.
