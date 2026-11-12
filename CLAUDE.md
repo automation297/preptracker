@@ -117,3 +117,13 @@ The seasoning/bag-cut calculator (`calcSeasoning`/`BAG_CUTS`/`calcPlanNight`) re
 - **The floor only applies within 3h before pay start** (`PAY_START_WINDOW_MIN`, default 180). An earlier punch is treated as a deliberate early shift (prep, a future lunch) and paid as punched — otherwise a noon clock-in would silently lose six hours. Change the time with `PAY_START_TIME` (default `18:25`) on Render, not in code.
 - Verified against the week of Oct 19: 42.42h raw → 41.27h paid (AWG 562.45 → 547.20 at 13.26), plus late/exact/noon/past-midnight/out-before-start edges.
 - **Applies to every week the moment it deploys, including weeks already in the system** — re-running `hours last week` for an old week will show the new number.
+
+## Owner pay = Nigel's nights + 3h, at 15/h (owner, 2026-11-12)
+*"Whatever Nigel works per day… add 3 hours to that… I get paid 3 hours more on the hours of Nigel at my rate."* Junior does not punch, so his week is **derived** in `ownerPayForWeek()` (`routes/time.js`) and returned as a separate **`owner`** field on `GET /api/time/timesheet` — never inside `rows`, so `paid [name]`, `labor-cost` and anything else walking `rows` is unchanged.
+
+- Each night Nigel worked → Nigel's **paid** hours that night (through `paidHours()`, so the 18:25 rule applies) + 3. Two punches on one Aruba night are summed into one night.
+- Junior works **6** nights, Nigel 5: the nights Nigel did not work are filled at **Nigel's average night that week** + 3. Nigel worked zero nights → `OWNER_PAY_FALLBACK_HOURS` (7.2 = 36h/5) + 3. Nigel worked more than 6 → Junior gets all of them.
+- Env (Render, all optional): `OWNER_PAY_RATE` 15, `OWNER_PAY_EXTRA_HOURS` 3, `OWNER_PAY_DAYS` 6, `OWNER_PAY_BASE_STAFF` nigel, `OWNER_PAY_FALLBACK_HOURS` 7.2, `OWNER_PAY_NAME` Junior, `OWNER_PAY_ENABLED=false` to switch off.
+- A failure here logs and leaves `owner: null` — it can never break the staff timesheet.
+- Verified with a stubbed pool: 5 × 7.2h nights → 61.2h / 918; a short night, Nigel off all week (fallback), 7 nights, and a split night.
+- **Not** in `labor-cost` (the monthly report) yet — only the weekly views show it.

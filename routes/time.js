@@ -455,6 +455,57 @@ router.get('/hours/:name', requireApiKey, async (req, res) => {
   }
 });
 
+// ── OWNER PAY (owner, 2026-11-12) ────────────────────────────────────────────────────
+// "I get paid 3 hours more on the hours of Nigel at my rate." Junior is not a punching
+// staff member, so his week is DERIVED, never punched:
+//   each night Nigel worked  → Nigel's paid hours that night + OWNER_PAY_EXTRA_HOURS
+//   Junior's other nights    → Nigel's AVERAGE night that week + OWNER_PAY_EXTRA_HOURS
+//                              (Nigel works 5 nights, Junior works OWNER_PAY_DAYS = 6)
+//   Nigel worked no nights   → OWNER_PAY_FALLBACK_HOURS (36h / 5) + extra
+// Paid hours go through paidHours(), so the 18:25 pay-start rule applies to Nigel's side
+// exactly as it does in his own row — the two can never disagree.
+// Returned as a SEPARATE `owner` field, never inside `rows`: `paid [name]`, labor-cost and
+// anything else that walks `rows` keeps working on punched staff only.
+const OWNER_PAY = {
+  name: process.env.OWNER_PAY_NAME || 'Junior',
+  base: String(process.env.OWNER_PAY_BASE_STAFF || 'nigel').trim().toLowerCase(),
+  rate: Number(process.env.OWNER_PAY_RATE) > 0 ? Number(process.env.OWNER_PAY_RATE) : 15,
+  extra: process.env.OWNER_PAY_EXTRA_HOURS && Number(process.env.OWNER_PAY_EXTRA_HOURS) >= 0 ? Number(process.env.OWNER_PAY_EXTRA_HOURS) : 3,
+  days: Number(process.env.OWNER_PAY_DAYS) > 0 ? Math.round(Number(process.env.OWNER_PAY_DAYS)) : 6,
+  fallback: Number(process.env.OWNER_PAY_FALLBACK_HOURS) > 0 ? Number(process.env.OWNER_PAY_FALLBACK_HOURS) : 7.2,
+  off: String(process.env.OWNER_PAY_ENABLED || '').toLowerCase() === 'false',
+};
+
+async function ownerPayForWeek(monday, sunday) {
+  if (OWNER_PAY.off) return null;
+  const base = await findStaff(OWNER_PAY.base);
+  if (!base) return null;
+  const { entries } = await hoursForStaff(base.id, monday, sunday);
+  // One figure per Aruba service night (a shift past midnight belongs to the night it started).
+  const byNight = new Map();
+  for (const e of entries) {
+    if (!e.paid_hours) continue;
+    const night = new Date(e.clock_in).toLocaleDateString('en-CA', { timeZone: 'America/Aruba' });
+    byNight.set(night, (byNight.get(night) || 0) + e.paid_hours);
+  }
+  const nights = [...byNight.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, h]) => ({ date, baseHours: +h.toFixed(2), hours: +(h + OWNER_PAY.extra).toFixed(2), filled: false }));
+  const baseTotal = nights.reduce((s, n) => s + n.baseHours, 0);
+  const baseAvg = nights.length ? baseTotal / nights.length : OWNER_PAY.fallback;
+  const filledDays = Math.max(0, OWNER_PAY.days - nights.length);
+  for (let i = 0; i < filledDays; i++) {
+    nights.push({ date: null, baseHours: +baseAvg.toFixed(2), hours: +(baseAvg + OWNER_PAY.extra).toFixed(2), filled: true });
+  }
+  const hours = nights.reduce((s, n) => s + n.baseHours + OWNER_PAY.extra, 0);
+  return {
+    name: OWNER_PAY.name, rate: OWNER_PAY.rate, extraHours: OWNER_PAY.extra,
+    baseName: base.display_name, baseDays: nights.length - filledDays,
+    baseAvg: +baseAvg.toFixed(2), usedFallback: nights.length === filledDays,
+    days: nights.length, filledDays,
+    hours: +hours.toFixed(2), pay: +(hours * OWNER_PAY.rate).toFixed(2), nights,
+  };
+}
+
 // GET /api/time/timesheet — every active staff member's week (owner view)
 router.get('/timesheet', requireApiKey, async (req, res) => {
   const refDate = req.query.ref ? new Date(req.query.ref) : new Date();
@@ -467,7 +518,10 @@ router.get('/timesheet', requireApiKey, async (req, res) => {
       const { totalHours, openCount } = await hoursForStaff(s.id, monday, sunday);
       rows.push({ staff: s, hours: totalHours, pay: +(totalHours * s.hourly_rate).toFixed(2), openCount });
     }
-    res.json({ weekStart: monday.toISOString().slice(0, 10), weekEnd: sunday.toISOString().slice(0, 10), rows });
+    // Owner pay must never cost the staff timesheet: on any failure it is simply absent.
+    let owner = null;
+    try { owner = await ownerPayForWeek(monday, sunday); } catch (e) { console.error('owner pay error:', e.message); }
+    res.json({ weekStart: monday.toISOString().slice(0, 10), weekEnd: sunday.toISOString().slice(0, 10), rows, owner });
   } catch (e) {
     res.status(500).json({ error: 'Could not load timesheet.' });
   }
